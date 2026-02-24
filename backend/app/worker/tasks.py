@@ -1,21 +1,24 @@
-"""
-Celery worker: обработка фото через InsightFace.
-Задача:
-1. Открывает фото с QNAP
-2. Обнаруживает лица (InsightFace/ArcFace)
-3. Для каждого лица: генерирует вектор 512-dim
-4. Сохраняет кроп лица на QNAP
-5. Ищет похожих в Qdrant (threshold > 0.75)
-6. Создаёт или обновляет запись Person
-7. Добавляет в очередь идентификации если нужно
-"""
 import uuid
+import os
 import logging
 import threading
+import onnxruntime as ort
+
 from app.worker.celery_app import celery_app
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# ── Конфигурация потоков ONNX Runtime ──
+# 48 ядер / 8 Celery workers = 6 потоков на воркер
+ORT_THREADS = int(os.getenv("ORT_INTRA_THREADS", "6"))
+ORT_INTER_THREADS = int(os.getenv("ORT_INTER_THREADS", "2"))
+
+# Ограничиваем потоки на уровне numpy/OpenBLAS/MKL
+os.environ.setdefault("OMP_NUM_THREADS", str(ORT_THREADS))
+os.environ.setdefault("MKL_NUM_THREADS", str(ORT_THREADS))
+os.environ.setdefault("OPENBLAS_NUM_THREADS", str(ORT_THREADS))
+os.environ.setdefault("NUMEXPR_NUM_THREADS", str(ORT_THREADS))
 
 # ── Lazy singleton для InsightFace (один раз на воркер-процесс) ──
 _face_app = None
@@ -29,14 +32,37 @@ def _get_face_app():
         with _face_app_lock:
             if _face_app is None:
                 from insightface.app import FaceAnalysis
-                logger.info("Инициализация InsightFace модели buffalo_l...")
+
+                # Настраиваем ONNX session options для многопоточности
+                sess_options = ort.SessionOptions()
+                sess_options.intra_op_num_threads = ORT_THREADS
+                sess_options.inter_op_num_threads = ORT_INTER_THREADS
+                sess_options.execution_mode = ort.ExecutionMode.ORT_PARALLEL
+
+                logger.info(
+                    "Инициализация InsightFace (ORT threads: intra=%d, inter=%d)...",
+                    ORT_THREADS, ORT_INTER_THREADS,
+                )
                 app = FaceAnalysis(
                     name="buffalo_l",
                     providers=["CPUExecutionProvider"],
+                    provider_options=[{}],
                 )
+                # Применяем session options ко всем моделям InsightFace
                 app.prepare(ctx_id=-1, det_size=(640, 640))
+                for model in app.models:
+                    if hasattr(model, 'session') and model.session is not None:
+                        # Пересоздаём сессию с нашими настройками потоков
+                        model_path = model.session._model_path if hasattr(model.session, '_model_path') else None
+                        if model_path:
+                            model.session = ort.InferenceSession(
+                                model_path,
+                                sess_options=sess_options,
+                                providers=["CPUExecutionProvider"],
+                            )
+
                 _face_app = app
-                logger.info("InsightFace модель загружена.")
+                logger.info("InsightFace модель загружена (ORT %s).", ort.__version__)
     return _face_app
 
 

@@ -32,6 +32,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QNAP_MOUNT_PATH=/mnt/qnap_photos
       - TZ=Europe/Kyiv
+      - PYTHONUNBUFFERED=1
+      - SEARCH_ORT_THREADS=8
     volumes:
       - /mnt/qnap_photos:/mnt/qnap_photos
     depends_on:
@@ -46,7 +48,7 @@ services:
       dockerfile: Dockerfile
     container_name: facewatch_celery
     restart: always
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=8 --pool=prefork
     env_file: .env
     environment:
       - DATABASE_URL=mysql+aiomysql://${MARIADB_USER:-facewatch}:${MARIADB_PASSWORD:-ke050442}@${MARIADB_HOST:-192.168.24.178}:${MARIADB_PORT:-3306}/${MARIADB_DB:-facewatch_db}
@@ -55,6 +57,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QNAP_MOUNT_PATH=/mnt/qnap_photos
       - TZ=Europe/Kyiv
+      - PYTHONUNBUFFERED=1
+      - ORT_INTRA_THREADS=6
+      - ORT_INTER_THREADS=2
+      - OMP_NUM_THREADS=6
+      - MKL_NUM_THREADS=6
+      - OPENBLAS_NUM_THREADS=6
     volumes:
       - /mnt/qnap_photos:/mnt/qnap_photos
     depends_on:
