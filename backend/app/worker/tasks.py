@@ -105,13 +105,14 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
             person_id_str = None   # строка для payload Qdrant
 
             if similar and similar[0].score >= settings.FACE_SIMILARITY_THRESHOLD:
-                # Предлагаем объединение — создаём задание в очереди
+                # Автоматически привязываем к совпавшему лицу
                 matched_person_id_str = similar[0].payload.get("person_id")
                 matched_person_id_uuid = uuid.UUID(matched_person_id_str) if matched_person_id_str else None
 
-                # Создаём Face запись (без person_id — ждёт подтверждения)
+                # Создаём Face запись сразу с person_id
                 face = Face(
                     id=uuid.uuid4(),
+                    person_id=matched_person_id_uuid,
                     message_id=message.id,
                     bbox=bbox,
                     confidence=confidence,
@@ -119,15 +120,6 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
                 session.add(face)
                 session.flush()
 
-                # Добавляем в очередь подтверждения
-                queue_entry = IdentificationQueue(
-                    id=uuid.uuid4(),
-                    face_id=face.id,
-                    suggested_person_id=matched_person_id_uuid,
-                    similarity=similar[0].score,
-                    status=IdentificationStatus.pending,
-                )
-                session.add(queue_entry)
                 person_id_str = matched_person_id_str
                 person_id_uuid = matched_person_id_uuid
             else:

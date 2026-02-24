@@ -6,7 +6,6 @@ import DashboardPage from '@/pages/DashboardPage';
 import MessagesPage from '@/pages/MessagesPage';
 import SearchPage from '@/pages/SearchPage';
 import PersonsPage from '@/pages/PersonsPage';
-import QueuePage from '@/pages/QueuePage';
 import GroupsPage from '@/pages/GroupsPage';
 import ImportPage from '@/pages/ImportPage';
 import UsersPage from '@/pages/UsersPage';
@@ -39,7 +38,6 @@ export default function App() {
                     {/* Admin-only routes */}
                     <Route path="messages" element={<AdminRoute><MessagesPage /></AdminRoute>} />
                     <Route path="persons" element={<AdminRoute><PersonsPage /></AdminRoute>} />
-                    <Route path="queue" element={<AdminRoute><QueuePage /></AdminRoute>} />
                     <Route path="groups" element={<AdminRoute><GroupsPage /></AdminRoute>} />
                     <Route path="import" element={<AdminRoute><ImportPage /></AdminRoute>} />
                     <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />

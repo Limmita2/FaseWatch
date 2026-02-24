@@ -223,20 +223,49 @@ async def search_by_text(
     result = await db.execute(stmt)
     rows = result.all()
 
+    def ser(m):
+        return {
+            "id": str(m.id), "text": m.text, "has_photo": m.has_photo,
+            "photo_path": m.photo_path,
+            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+            "sender_name": m.sender_name,
+        }
+
+    results_data = []
+    for msg, gname in rows:
+        # Fetch context: 3 before, 1 after
+        before = await db.execute(
+            select(Message)
+            .where(Message.group_id == msg.group_id, Message.timestamp < msg.timestamp)
+            .order_by(Message.timestamp.desc()).limit(3)
+        )
+        after = await db.execute(
+            select(Message)
+            .where(Message.group_id == msg.group_id, Message.timestamp > msg.timestamp)
+            .order_by(Message.timestamp.asc()).limit(1)
+        )
+        
+        context = {
+            "group_name": gname,
+            "before": [ser(m) for m in reversed(before.scalars().all())],
+            "message": ser(msg),
+            "after": [ser(m) for m in after.scalars().all()],
+        }
+        
+        results_data.append({
+            "id": str(msg.id),
+            "group_id": str(msg.group_id),
+            "group_name": gname,
+            "text": msg.text,
+            "has_photo": msg.has_photo,
+            "photo_path": msg.photo_path,
+            "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+            "sender_name": msg.sender_name,
+            "context": context
+        })
+
     return {
         "query": q,
         "total": len(rows),
-        "results": [
-            {
-                "id": str(msg.id),
-                "group_id": str(msg.group_id),
-                "group_name": gname,
-                "text": msg.text,
-                "has_photo": msg.has_photo,
-                "photo_path": msg.photo_path,
-                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-                "sender_name": msg.sender_name,
-            }
-            for msg, gname in rows
-        ],
+        "results": results_data,
     }

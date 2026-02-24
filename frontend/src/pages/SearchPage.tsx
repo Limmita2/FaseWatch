@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { searchApi } from '@/services/api';
@@ -271,7 +272,14 @@ export default function SearchPage() {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {textResults.map((r: any) => (
-                            <div key={r.id} className="glass-card" style={{ padding: '14px' }}>
+                            <div
+                                key={r.id}
+                                className="glass-card"
+                                style={{ padding: '14px', cursor: 'pointer', transition: 'border-color 0.2s', border: '1px solid transparent' }}
+                                onClick={() => setExpandedMatch({ ...r, similarity: null })} // similarity is null for text search
+                                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--fw-primary, #3b82f6)'}
+                                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                            >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
                                     <span className="badge badge-primary">{r.group_name || '—'}</span>
                                     {r.sender_name && <span style={{ fontSize: '13px', fontWeight: 500 }}>{r.sender_name}</span>}
@@ -295,19 +303,25 @@ export default function SearchPage() {
 
                         <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
                             {/* Left side: Photo */}
-                            <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
-                                <img
-                                    src={`/files/${(expandedMatch.photo_path || expandedMatch.crop_path || '').replace(/^\/mnt\/qnap_photos\//, '')}`}
-                                    alt="expanded match"
-                                    style={{ width: '100%', borderRadius: 'var(--fw-radius)', border: `3px solid ${expandedMatch.similarity > 80 ? 'var(--fw-success, #22c55e)' : 'var(--fw-warning, #f59e0b)'}`, objectFit: 'contain', maxHeight: '75vh' }}
-                                />
-                                <div style={{ textAlign: 'center', fontSize: '24px', fontWeight: 700, color: expandedMatch.similarity > 80 ? 'var(--fw-success, #22c55e)' : 'var(--fw-warning, #f59e0b)' }}>
-                                    Схожість: {expandedMatch.similarity}%
+                            {(expandedMatch.photo_path || expandedMatch.crop_path) && (
+                                <div style={{ flex: '1 1 500px', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
+                                    <img
+                                        src={`/files/${(expandedMatch.photo_path || expandedMatch.crop_path || '').replace(/^\/mnt\/qnap_photos\//, '')}`}
+                                        alt="expanded match"
+                                        style={{ width: '75%', borderRadius: 'var(--fw-radius)', border: expandedMatch.similarity !== null && expandedMatch.similarity !== undefined ? `3px solid ${expandedMatch.similarity > 80 ? 'var(--fw-success, #22c55e)' : 'var(--fw-warning, #f59e0b)'}` : '3px solid var(--fw-primary, #3b82f6)', objectFit: 'contain', maxHeight: '40vh' }}
+                                    />
+                                    {expandedMatch.similarity !== null && expandedMatch.similarity !== undefined && (
+                                        <div style={{ textAlign: 'center', fontSize: '24px', fontWeight: 700, color: expandedMatch.similarity > 80 ? 'var(--fw-success, #22c55e)' : 'var(--fw-warning, #f59e0b)' }}>
+                                            Схожість: {expandedMatch.similarity}%
+                                        </div>
+                                    )}
+                                    {expandedMatch.person && (
+                                        <div style={{ textAlign: 'center', color: 'var(--fw-text-muted)', fontSize: '18px' }}>
+                                            {expandedMatch.person.display_name || `Персона ${expandedMatch.person.id?.slice(0, 8) || '—'}`}
+                                        </div>
+                                    )}
                                 </div>
-                                <div style={{ textAlign: 'center', color: 'var(--fw-text-muted)', fontSize: '18px' }}>
-                                    {expandedMatch.person?.display_name || `Персона ${expandedMatch.person?.id?.slice(0, 8) || '—'}`}
-                                </div>
-                            </div>
+                            )}
 
                             {/* Right side: Context */}
                             <div style={{ flex: '2 1 400px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -323,7 +337,11 @@ export default function SearchPage() {
                                             <div key={msg.id || idx} style={{ padding: '8px 0', color: 'var(--fw-text-muted)', borderLeft: '2px solid var(--fw-text-dim)', paddingLeft: '12px', marginBottom: '12px' }}>
                                                 <span style={{ fontSize: '12px', opacity: 0.6 }}>{msg.timestamp?.slice(11, 16)}</span><br />
                                                 {msg.sender_name && <b style={{ color: 'var(--fw-text)' }}>{msg.sender_name}: </b>}
-                                                {msg.text || (msg.has_photo ? '📷 Фото' : '—')}
+                                                {msg.text}
+                                                {msg.photo_path && (
+                                                    <img src={`/files/${msg.photo_path.replace(/^\/mnt\/qnap_photos\//, '')}`} alt="context before" style={{ width: '50%', borderRadius: '8px', marginTop: '8px', display: 'block', maxHeight: '200px', objectFit: 'contain' }} />
+                                                )}
+                                                {!msg.text && !msg.photo_path && msg.has_photo && '📷 Фото (не завантажено)'}
                                             </div>
                                         ))}
 
@@ -335,14 +353,21 @@ export default function SearchPage() {
                                         }}>
                                             <span style={{ fontSize: '12px', opacity: 0.6 }}>{expandedMatch.context.message?.timestamp?.slice(11, 16)}</span><br />
                                             ★ {expandedMatch.context.message?.sender_name && <b style={{ color: 'var(--fw-text)' }}>{expandedMatch.context.message.sender_name}: </b>}
-                                            {expandedMatch.context.message?.text || '📷 Фото зі збігом'}
+                                            {expandedMatch.context.message?.text}
+                                            {expandedMatch.context.message?.photo_path && (
+                                                <img src={`/files/${expandedMatch.context.message.photo_path.replace(/^\/mnt\/qnap_photos\//, '')}`} alt="matched context" style={{ width: '50%', borderRadius: '8px', marginTop: '8px', display: 'block', maxHeight: '200px', objectFit: 'contain' }} />
+                                            )}
                                         </div>
 
                                         {expandedMatch.context.after?.map((msg: any, idx: number) => (
                                             <div key={msg.id || idx} style={{ padding: '8px 0', color: 'var(--fw-text-muted)', borderLeft: '2px solid var(--fw-text-dim)', paddingLeft: '12px', marginBottom: '12px' }}>
                                                 <span style={{ fontSize: '12px', opacity: 0.6 }}>{msg.timestamp?.slice(11, 16)}</span><br />
                                                 {msg.sender_name && <b style={{ color: 'var(--fw-text)' }}>{msg.sender_name}: </b>}
-                                                {msg.text || (msg.has_photo ? '📷 Фото' : '—')}
+                                                {msg.text}
+                                                {msg.photo_path && (
+                                                    <img src={`/files/${msg.photo_path.replace(/^\/mnt\/qnap_photos\//, '')}`} alt="context after" style={{ width: '50%', borderRadius: '8px', marginTop: '8px', display: 'block', maxHeight: '200px', objectFit: 'contain' }} />
+                                                )}
+                                                {!msg.text && !msg.photo_path && msg.has_photo && '📷 Фото (не завантажено)'}
                                             </div>
                                         ))}
                                     </div>

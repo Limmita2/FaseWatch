@@ -11,7 +11,6 @@ export default function Sidebar() {
         { path: '/input', label: 'Ввод', icon: '📷', adminOnly: true },
         { path: '/messages', label: 'Сообщения', icon: '💬', adminOnly: true },
         { path: '/persons', label: 'Персоны', icon: '👤', adminOnly: true },
-        { path: '/queue', label: 'Очередь', icon: '✅', adminOnly: true },
         { path: '/groups', label: 'Группы', icon: '👥', adminOnly: true },
         { path: '/import', label: 'Импорт', icon: '📦', adminOnly: true },
         { path: '/users', label: 'Пользователи', icon: '⚙️', adminOnly: true },

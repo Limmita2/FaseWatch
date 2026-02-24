@@ -31,6 +31,7 @@ services:
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379/0
       - QNAP_MOUNT_PATH=/mnt/qnap_photos
+      - TZ=Europe/Kyiv
     volumes:
       - /mnt/qnap_photos:/mnt/qnap_photos
     depends_on:
@@ -53,6 +54,7 @@ services:
       - QDRANT_PORT=6333
       - REDIS_URL=redis://redis:6379/0
       - QNAP_MOUNT_PATH=/mnt/qnap_photos
+      - TZ=Europe/Kyiv
     volumes:
       - /mnt/qnap_photos:/mnt/qnap_photos
     depends_on:
@@ -68,6 +70,8 @@ services:
     env_file: .env
     environment:
       - BACKEND_API_URL=http://backend:8000
+      - TZ=Europe/Kyiv
+      - PYTHONUNBUFFERED=1
     depends_on:
       - backend
 
