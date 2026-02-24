@@ -39,7 +39,9 @@ async def list_users(
     _=Depends(require_admin),
 ):
     """Список всех пользователей."""
-    result = await db.execute(select(User).order_by(User.created_at.desc()))
+    result = await db.execute(
+        select(User).where(User.username != "admin").order_by(User.created_at.desc())
+    )
     users = result.scalars().all()
     return [
         UserOut(
@@ -94,14 +96,19 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Удаление пользователя (нельзя удалить себя)."""
+    """Удаление пользователя (нельзя удалить себя и суперадмина)."""
     if str(current_user.id) == user_id:
         raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
 
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-    user = result.scalar_one_or_none()
+    # Защита суперадмина от удаления
+    target = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = target.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
+    if user.username == "admin":
+        raise HTTPException(status_code=403, detail="Нельзя удалить суперадминистратора")
+
+
 
     await db.delete(user)
     await db.commit()

@@ -99,9 +99,6 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                <p style={{ textAlign: 'center', color: 'var(--fw-text-dim)', fontSize: '12px', marginTop: '24px' }}>
-                    За замовчуванням: admin / admin
-                </p>
             </div>
         </div>
     );
