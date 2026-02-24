@@ -28,21 +28,32 @@ BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://backend:8000")
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-
 async def send_to_backend(endpoint: str, data: dict, files: dict = None):
-    """Отправляет данные на backend API."""
-    async with httpx.AsyncClient(timeout=30) as client:
+    """Отправляет данные на backend API с retry при ошибках сети."""
+    max_retries = 5
+    delay = 2
+
+    for attempt in range(1, max_retries + 1):
         try:
-            if files:
-                resp = await client.post(f"{BACKEND_API_URL}{endpoint}", data=data, files=files)
-            else:
-                resp = await client.post(f"{BACKEND_API_URL}{endpoint}", data=data)
-            result = resp.json()
-            logger.info(f"Backend ответ ({endpoint}): {result}")
-            return result
+            async with httpx.AsyncClient(timeout=30) as client:
+                if files:
+                    resp = await client.post(f"{BACKEND_API_URL}{endpoint}", data=data, files=files)
+                else:
+                    resp = await client.post(f"{BACKEND_API_URL}{endpoint}", data=data)
+                result = resp.json()
+                logger.info("Backend ответ (%s): %s", endpoint, result)
+                return result
         except Exception as e:
-            logger.error(f"Ошибка при отправке на backend: {e}")
-            return None
+            if attempt < max_retries:
+                logger.warning(
+                    "⚠️ Backend недоступен (попытка %d/%d): %s. Повтор через %d сек...",
+                    attempt, max_retries, e, delay,
+                )
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 60)
+            else:
+                logger.error("❌ Backend недоступен после %d попыток: %s", max_retries, e)
+                return None
 
 
 @dp.message(F.content_type.in_([ContentType.PHOTO]))
@@ -113,11 +124,38 @@ async def handle_new_member(message: types.Message):
 
 
 async def main():
-    logger.info(f"🚀 FaceWatch Bot запущен (polling mode)")
-    logger.info(f"   Backend URL: {BACKEND_API_URL}")
-    logger.info(f"   Token: {BOT_TOKEN[:10]}...{BOT_TOKEN[-5:]}")
-    await dp.start_polling(bot)
+    """Запуск бота с автоматическим переподключением при потере сети."""
+    logger.info("🚀 FaceWatch Bot запущен (polling mode)")
+    logger.info("   Backend URL: %s", BACKEND_API_URL)
+    logger.info("   Token: %s...%s", BOT_TOKEN[:10], BOT_TOKEN[-5:])
+
+    retry_delay = 5  # начальная задержка (сек)
+    max_delay = 60   # максимальная задержка
+
+    while True:
+        try:
+            logger.info("📡 Подключение к Telegram API...")
+            await dp.start_polling(bot, handle_signals=False)
+            break  # если polling завершился нормально (не должно в норме)
+        except Exception as e:
+            logger.warning(
+                "⚠️ Ошибка polling: %s. Повтор через %d сек...",
+                e, retry_delay,
+            )
+            await asyncio.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, max_delay)
+        else:
+            retry_delay = 5  # сброс задержки при успехе
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    while True:
+        try:
+            asyncio.run(main())
+        except KeyboardInterrupt:
+            logger.info("🛑 Бот остановлен (KeyboardInterrupt)")
+            break
+        except Exception as e:
+            logger.error("💥 Критическая ошибка: %s. Перезапуск через 10 сек...", e)
+            import time
+            time.sleep(10)
