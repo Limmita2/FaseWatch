@@ -4,7 +4,8 @@ Endpoint для приёма данных от бота (внутренний AP
 from fastapi import APIRouter, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import uuid
 
 from app.core.database import get_db
@@ -13,6 +14,8 @@ from app.models.models import Group, Message
 from app.services.storage_service import save_photo_to_qnap
 
 router = APIRouter()
+
+LOCAL_TZ = ZoneInfo("Europe/Kyiv")
 
 
 @router.post("/message")
@@ -38,12 +41,15 @@ async def receive_bot_message(
         db.add(group)
         await db.flush()
 
-    # Обработка timestamp
+    # Обработка timestamp — конвертируем UTC из Telegram в Europe/Kyiv
     ts = None
     try:
         ts = datetime.fromisoformat(timestamp)
+        # Если есть timezone info (UTC от Telegram) — конвертируем в локальное
+        if ts.tzinfo is not None:
+            ts = ts.astimezone(LOCAL_TZ).replace(tzinfo=None)
     except (ValueError, TypeError):
-        ts = datetime.utcnow()
+        ts = datetime.now(LOCAL_TZ).replace(tzinfo=None)
 
     # Сохраняем фото на QNAP
     photo_path = None
