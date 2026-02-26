@@ -14,6 +14,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Предварительно скачиваем веса InsightFace, чтобы избежать конфликтов (INVALID_PROTOBUF) 
+# при одновременном запуске нескольких воркеров Celery
+RUN python -c "from insightface.app import FaceAnalysis; FaceAnalysis(name='buffalo_l')"
+
 # Копируем код приложения
 COPY . .
 # Переменные окружения

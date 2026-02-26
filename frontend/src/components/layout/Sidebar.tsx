@@ -7,13 +7,12 @@ export default function Sidebar() {
 
     const navItems = [
         { path: '/', label: 'Дашборд', icon: '📊', adminOnly: false },
-        { path: '/search', label: 'Поиск', icon: '🔍', adminOnly: false },
-        { path: '/input', label: 'Ввод', icon: '📷', adminOnly: true },
-        { path: '/messages', label: 'Сообщения', icon: '💬', adminOnly: true },
-        { path: '/persons', label: 'Персоны', icon: '👤', adminOnly: true },
-        { path: '/groups', label: 'Группы', icon: '👥', adminOnly: true },
-        { path: '/import', label: 'Импорт', icon: '📦', adminOnly: true },
-        { path: '/users', label: 'Пользователи', icon: '⚙️', adminOnly: true },
+        { path: '/search', label: 'Пошук', icon: '🔍', adminOnly: false },
+        { path: '/input', label: 'Введення', icon: '📷', adminOnly: true },
+        { path: '/messages', label: 'Повідомлення', icon: '💬', adminOnly: true },
+        { path: '/groups', label: 'Групи', icon: '👥', adminOnly: true },
+        { path: '/import', label: 'Імпорт', icon: '📦', adminOnly: true },
+        { path: '/users', label: 'Користувачі', icon: '⚙️', adminOnly: true },
     ];
 
     const visibleItems = navItems.filter(item => !item.adminOnly || role === 'admin');
@@ -25,8 +24,8 @@ export default function Sidebar() {
 
     return (
         <aside className="sidebar">
-            <div className="sidebar-header">
-                <h2>FaseWatch</h2>
+            <div className="sidebar-logo" style={{ marginBottom: '40px' }}>
+                <span style={{ fontSize: '24px', letterSpacing: '4px' }}>FASEWATCH</span>
             </div>
             <nav className="sidebar-nav">
                 {visibleItems.map(item => (
@@ -35,17 +34,17 @@ export default function Sidebar() {
                         to={item.path}
                         end={item.path === '/'}
                         className={({ isActive }) =>
-                            `nav-item ${isActive ? 'active' : ''}`
+                            `nav-link ${isActive ? 'active' : ''}`
                         }
                     >
-                        <span className="nav-icon">{item.icon}</span>
-                        <span className="nav-label">{item.label}</span>
+                        <span className="nav-icon" style={{ fontSize: '18px' }}>{item.icon}</span>
+                        <span className="nav-label" style={{ textTransform: 'uppercase', letterSpacing: '1px' }}>{item.label}</span>
                     </NavLink>
                 ))}
             </nav>
-            <div className="sidebar-footer">
-                <span className="role-badge">{role === 'admin' ? 'Админ' : 'Оператор'}</span>
-                <button onClick={handleLogout} className="logout-btn">Выйти</button>
+            <div className="sidebar-footer" style={{ marginTop: 'auto', paddingTop: '24px', borderTop: '1px solid var(--fw-border)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <span className="badge badge-primary" style={{ alignSelf: 'flex-start' }}>{role === 'admin' ? 'АДМІНІСТРАТОР' : 'ОПЕРАТОР'}</span>
+                <button onClick={handleLogout} className="btn-secondary" style={{ width: '100%' }}>[ ВІДКЛЮЧИТИСЯ ]</button>
             </div>
         </aside>
     );

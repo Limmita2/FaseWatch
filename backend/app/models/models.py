@@ -51,22 +51,11 @@ class Message(Base):
     faces = relationship("Face", back_populates="message")
 
 
-class Person(Base):
-    __tablename__ = "persons"
-
-    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    display_name = Column(Text, nullable=True)
-    confirmed = Column(Boolean, default=False)
-    created_at = Column(TIMESTAMP, server_default=func.now())
-
-    faces = relationship("Face", back_populates="person")
-
 
 class Face(Base):
     __tablename__ = "faces"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    person_id = Column(Uuid, ForeignKey("persons.id"), nullable=True)
     message_id = Column(Uuid, ForeignKey("messages.id"), nullable=True)
     crop_path = Column(Text, nullable=True)        # мини-превью на QNAP
     qdrant_point_id = Column(Uuid, nullable=True)
@@ -74,26 +63,8 @@ class Face(Base):
     confidence = Column(Float, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
-    person = relationship("Person", back_populates="faces")
     message = relationship("Message", back_populates="faces")
-    queue_entries = relationship("IdentificationQueue", back_populates="face")
 
-
-class IdentificationQueue(Base):
-    __tablename__ = "identification_queue"
-
-    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    face_id = Column(Uuid, ForeignKey("faces.id"), nullable=False)
-    suggested_person_id = Column(Uuid, ForeignKey("persons.id"), nullable=True)
-    similarity = Column(Float, nullable=True)
-    status = Column(Enum(IdentificationStatus), default=IdentificationStatus.pending)
-    reviewed_by = Column(Uuid, ForeignKey("users.id"), nullable=True)
-    reviewed_at = Column(TIMESTAMP, nullable=True)
-    created_at = Column(TIMESTAMP, server_default=func.now())
-
-    face = relationship("Face", back_populates="queue_entries")
-    suggested_person = relationship("Person", foreign_keys=[suggested_person_id])
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
 
 
 class User(Base):

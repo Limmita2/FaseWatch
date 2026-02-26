@@ -58,7 +58,7 @@ async def delete_group(
     _=Depends(require_admin),
 ):
     """Удаление группы и всех сообщений (admin only)."""
-    from app.models.models import Face, IdentificationQueue
+    from app.models.models import Face
     from fastapi import HTTPException
     import uuid
 
@@ -73,9 +73,6 @@ async def delete_group(
     for msg in messages.scalars().all():
         faces = await db.execute(select(Face).where(Face.message_id == msg.id))
         for face in faces.scalars().all():
-            queues = await db.execute(select(IdentificationQueue).where(IdentificationQueue.face_id == face.id))
-            for q in queues.scalars().all():
-                await db.delete(q)
             await db.delete(face)
         await db.delete(msg)
 

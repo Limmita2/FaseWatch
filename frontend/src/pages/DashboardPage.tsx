@@ -5,8 +5,6 @@ interface DashboardData {
     groups: number;
     messages: number;
     faces: number;
-    persons: number;
-    pending_identifications: number;
     recent_messages: Array<{
         id: string;
         group_name: string;
@@ -29,25 +27,29 @@ export default function DashboardPage() {
         { label: 'Групи', value: data.groups, icon: '👥' },
         { label: 'Повідомлень', value: data.messages, icon: '💬' },
         { label: 'Облич', value: data.faces, icon: '🧑' },
-        { label: 'Персон', value: data.persons, icon: '👤' },
-        { label: 'Очікує перевірки', value: data.pending_identifications, icon: '⏳' },
     ];
 
     return (
         <div className="animate-fade-in">
-            <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>📊 Дашборд</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
+                [ СТАН СИСТЕМИ ]
+            </h1>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px', marginBottom: '32px' }}>
                 {stats.map((s) => (
                     <div key={s.label} className="glass-card stat-card">
-                        <span style={{ fontSize: '20px' }}>{s.icon}</span>
-                        <span className="stat-value">{s.value.toLocaleString()}</span>
-                        <span className="stat-label">{s.label}</span>
+                        <span style={{ fontSize: '20px', color: 'var(--fw-primary)' }}>{s.icon}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <span className="stat-value">{s.value.toLocaleString()}</span>
+                            <span className="stat-label">{s.label}</span>
+                        </div>
                     </div>
                 ))}
             </div>
 
-            <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px' }}>🕐 Останні надходження</h2>
+            <h2 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: 'var(--fw-text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                &gt; ОСТАННІ_ДАНІ
+            </h2>
             <div className="glass-card table-container">
                 <table>
                     <thead>

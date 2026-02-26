@@ -20,7 +20,7 @@ export default function LoginPage() {
             login(data.access_token, data.role);
             navigate('/');
         } catch {
-            setError('Неверный логин или пароль');
+            setError('Невірний логін або пароль');
         } finally {
             setLoading(false);
         }
@@ -48,14 +48,14 @@ export default function LoginPage() {
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent',
                     }}>FaceWatch</h1>
-                    <p style={{ color: 'var(--fw-text-muted)', marginTop: '8px', fontSize: '14px' }}>
-                        Система мониторинга з розпізнаванням облич
+                    <p style={{ color: 'var(--fw-text-muted)', marginTop: '8px', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                        СИСТЕМА МОНІТОРИНГУ З РОЗПІЗНАВАННЯМ ОБЛИЧ
                     </p>
                 </div>
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div>
-                        <label style={{ display: 'block', fontSize: '13px', color: 'var(--fw-text-muted)', marginBottom: '6px' }}>
+                        <label style={{ display: 'block', fontSize: '13px', color: 'var(--fw-text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
                             Логін
                         </label>
                         <input
@@ -68,7 +68,7 @@ export default function LoginPage() {
                         />
                     </div>
                     <div>
-                        <label style={{ display: 'block', fontSize: '13px', color: 'var(--fw-text-muted)', marginBottom: '6px' }}>
+                        <label style={{ display: 'block', fontSize: '13px', color: 'var(--fw-text-muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>
                             Пароль
                         </label>
                         <input
@@ -95,7 +95,7 @@ export default function LoginPage() {
                     )}
 
                     <button className="btn-primary" type="submit" disabled={loading} style={{ marginTop: '8px', padding: '12px' }}>
-                        {loading ? <span className="spinner" style={{ width: 18, height: 18, margin: '0 auto' }} /> : 'Увійти'}
+                        {loading ? <span className="spinner" style={{ width: 18, height: 18, margin: '0 auto' }} /> : '[ УВІЙТИ ]'}
                     </button>
                 </form>
 

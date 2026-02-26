@@ -10,7 +10,7 @@ export default function InputPage() {
     const [photo, setPhoto] = useState<File | null>(null);
     const [preview, setPreview] = useState<string | null>(null);
     const [text, setText] = useState('');
-    const [groupName, setGroupName] = useState('Ручной ввод');
+    const [groupName, setGroupName] = useState('Ручне введення');
     const [groupId, setGroupId] = useState('');
     const [groups, setGroups] = useState<GroupOption[]>([]);
     const [loading, setLoading] = useState(false);
@@ -40,7 +40,7 @@ export default function InputPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!photo) return setError('Выберите фото');
+        if (!photo) return setError('Оберіть фото');
         setLoading(true);
         setError('');
         setResult(null);
@@ -51,7 +51,7 @@ export default function InputPage() {
             setPreview(null);
             setText('');
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Ошибка загрузки');
+            setError(err.response?.data?.detail || 'Помилка завантаження');
         } finally {
             setLoading(false);
         }
@@ -59,12 +59,14 @@ export default function InputPage() {
 
     return (
         <div className="animate-fade-in" style={{ maxWidth: '100%' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>📷 Ввод фото для распознавания</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
+                [ ЗАВАНТАЖЕННЯ ДАНИХ ]
+            </h1>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
                 {/* Левая колонка — загрузка */}
                 <div className="glass-card" style={{ padding: '28px' }}>
-                    <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px' }}>Загрузка фото</h2>
+                    <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px', color: 'var(--fw-text)', textTransform: 'uppercase', letterSpacing: '1px' }}>[ ЦІЛЬ ЗАВАНТАЖЕННЯ ]</h2>
 
                     <div
                         onDrop={handleDrop}
@@ -94,12 +96,12 @@ export default function InputPage() {
                             style={{ display: 'none' }}
                         />
                         {preview ? (
-                            <img src={preview} alt="Превью" style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px' }} />
+                            <img src={preview} alt="Попередній перегляд" style={{ maxWidth: '100%', maxHeight: '400px', borderRadius: '8px' }} />
                         ) : (
                             <>
-                                <div style={{ fontSize: '48px', marginBottom: '12px' }}>📸</div>
-                                <p style={{ fontSize: '16px', fontWeight: 500, marginBottom: '8px' }}>Перетащите фото сюда</p>
-                                <p style={{ fontSize: '13px', color: 'var(--fw-text-dim)' }}>или нажмите для выбора файла</p>
+                                <div style={{ fontSize: '48px', marginBottom: '12px', color: 'var(--fw-primary)' }}>&darr;</div>
+                                <p style={{ fontSize: '16px', fontWeight: 700, marginBottom: '8px', textTransform: 'uppercase', color: 'var(--fw-primary)' }}>[ ПЕРЕТЯГНІТЬ ФАЙЛ СЮДИ ]</p>
+                                <p style={{ fontSize: '13px', color: 'var(--fw-text-muted)', textTransform: 'uppercase' }}>або натисніть для вибору файлу</p>
                             </>
                         )}
                     </div>
@@ -113,12 +115,12 @@ export default function InputPage() {
 
                 {/* Правая колонка — форма */}
                 <div className="glass-card" style={{ padding: '28px' }}>
-                    <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px' }}>Параметры</h2>
+                    <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '20px', color: 'var(--fw-text)', textTransform: 'uppercase', letterSpacing: '1px' }}>[ ПАРАМЕТРИ ЗАВАНТАЖЕННЯ ]</h2>
 
                     <form onSubmit={handleSubmit}>
                         <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: 'var(--fw-text-muted)' }}>
-                                Группа
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                ЦІЛЬОВЕ ДЖЕРЕЛО
                             </label>
                             <select
                                 className="input-field"
@@ -127,11 +129,11 @@ export default function InputPage() {
                                     setGroupId(e.target.value);
                                     const g = groups.find(g => g.id === e.target.value);
                                     if (g) setGroupName(g.name);
-                                    else setGroupName('Ручной ввод');
+                                    else setGroupName('Ручне введення');
                                 }}
                                 style={{ width: '100%', padding: '10px 14px', fontSize: '15px' }}
                             >
-                                <option value="">📁 Ручной ввод (новая группа)</option>
+                                <option value="">📁 Ручне введення (нова група)</option>
                                 {groups.map(g => (
                                     <option key={g.id} value={g.id}>{g.name}</option>
                                 ))}
@@ -139,15 +141,15 @@ export default function InputPage() {
                         </div>
 
                         <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: 'var(--fw-text-muted)' }}>
-                                Описание / текст сообщения
+                            <label style={{ display: 'block', fontSize: '13px', fontWeight: 700, marginBottom: '6px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                СИРИЙ ТЕКСТ / МЕТАДАНІ
                             </label>
                             <textarea
                                 className="input-field"
                                 value={text}
                                 onChange={e => setText(e.target.value)}
                                 rows={5}
-                                placeholder="Введите описание фото (необязательно)"
+                                placeholder="Введіть опис фото (необов'язково)"
                                 style={{ width: '100%', padding: '10px 14px', fontSize: '15px', resize: 'vertical', minHeight: '120px' }}
                             />
                         </div>
@@ -170,7 +172,7 @@ export default function InputPage() {
                                 opacity: loading || !photo ? 0.5 : 1,
                             }}
                         >
-                            {loading ? '⏳ Загрузка...' : '📤 Загрузить и обработать лица'}
+                            {loading ? '[ ОПРАЦЮВАННЯ... ]' : '[ ЗАПУСТИТИ ПОСЛІДОВНІСТЬ ЗАВАНТАЖЕННЯ ]'}
                         </button>
                     </form>
                 </div>
@@ -178,10 +180,10 @@ export default function InputPage() {
 
             {result && (
                 <div className="glass-card" style={{ marginTop: '24px', padding: '24px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px', color: '#22c55e' }}>✅ Фото загружено и отправлено на обработку</h3>
+                    <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '16px', color: '#22c55e' }}>✅ Фото завантажено та відправлено на обробку</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                         <div>
-                            <span style={{ fontSize: '13px', color: 'var(--fw-text-dim)' }}>Группа</span>
+                            <span style={{ fontSize: '13px', color: 'var(--fw-text-dim)' }}>Група</span>
                             <p style={{ fontSize: '15px', fontWeight: 500 }}>{result.group_name}</p>
                         </div>
                         <div>
@@ -189,8 +191,8 @@ export default function InputPage() {
                             <p style={{ fontSize: '15px', fontWeight: 500 }}>{result.text || '—'}</p>
                         </div>
                         <div>
-                            <span style={{ fontSize: '13px', color: 'var(--fw-text-dim)' }}>Обработка лиц</span>
-                            <p style={{ fontSize: '15px', fontWeight: 500, color: '#f59e0b' }}>🔄 В очереди Celery</p>
+                            <span style={{ fontSize: '13px', color: 'var(--fw-text-dim)' }}>Обробка облич</span>
+                            <p style={{ fontSize: '15px', fontWeight: 500, color: '#f59e0b' }}>🔄 У черзі Celery</p>
                         </div>
                     </div>
                 </div>

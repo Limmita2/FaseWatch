@@ -21,7 +21,7 @@ export default function UsersPage() {
             const res = await usersApi.list();
             setUsers(res.data);
         } catch {
-            setError('Ошибка загрузки пользователей');
+            setError('Помилка завантаження користувачів');
         } finally {
             setLoading(false);
         }
@@ -37,23 +37,23 @@ export default function UsersPage() {
             await usersApi.create(form);
             setForm({ username: '', password: '', role: 'operator', description: '' });
             setShowForm(false);
-            setSuccess('Пользователь создан');
+            setSuccess('Користувача створено');
             fetchUsers();
             setTimeout(() => setSuccess(''), 3000);
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Ошибка создания пользователя');
+            setError(err.response?.data?.detail || 'Помилка створення користувача');
         }
     };
 
     const handleDelete = async (id: string, username: string) => {
-        if (!confirm(`Удалить пользователя "${username}"?`)) return;
+        if (!confirm(`Видалити користувача "${username}"?`)) return;
         try {
             await usersApi.delete(id);
-            setSuccess(`Пользователь "${username}" удалён`);
+            setSuccess(`Користувача "${username}" видалено`);
             fetchUsers();
             setTimeout(() => setSuccess(''), 3000);
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Ошибка удаления');
+            setError(err.response?.data?.detail || 'Помилка видалення');
         }
     };
 
@@ -66,13 +66,15 @@ export default function UsersPage() {
     return (
         <div className="animate-fade-in" style={{ maxWidth: '100%', padding: '0' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h1 style={{ fontSize: '24px', fontWeight: 700 }}>⚙️ Управление пользователями</h1>
+                <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
+                    [ ОПЕРАТОРИ СИСТЕМИ ]
+                </h1>
                 <button
                     className={showForm ? 'btn-secondary' : 'btn-primary'}
                     onClick={() => { setShowForm(!showForm); setError(''); }}
                     style={{ padding: '10px 24px', fontSize: '15px' }}
                 >
-                    {showForm ? '✕ Отмена' : '+ Добавить пользователя'}
+                    {showForm ? '✕ Скасувати' : '+ Додати користувача'}
                 </button>
             </div>
 
@@ -89,17 +91,17 @@ export default function UsersPage() {
 
             {showForm && (
                 <div className="glass-card" style={{ padding: '28px', marginBottom: '24px' }}>
-                    <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px' }}>Новый пользователь</h2>
+                    <h2 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '20px' }}>Новий користувач</h2>
                     <form onSubmit={handleCreate}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                             <div>
-                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: 'var(--fw-text-muted)' }}>Логин *</label>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: 'var(--fw-text-muted)' }}>Логін *</label>
                                 <input
                                     className="input-field"
                                     type="text"
                                     value={form.username}
                                     required
-                                    placeholder="Введите логин"
+                                    placeholder="Введіть логін"
                                     onChange={e => setForm({ ...form, username: e.target.value })}
                                     style={{ width: '100%', padding: '10px 14px', fontSize: '15px' }}
                                 />
@@ -111,7 +113,7 @@ export default function UsersPage() {
                                     type="password"
                                     value={form.password}
                                     required
-                                    placeholder="Введите пароль"
+                                    placeholder="Введіть пароль"
                                     onChange={e => setForm({ ...form, password: e.target.value })}
                                     style={{ width: '100%', padding: '10px 14px', fontSize: '15px' }}
                                 />
@@ -127,23 +129,23 @@ export default function UsersPage() {
                                     style={{ width: '100%', padding: '10px 14px', fontSize: '15px' }}
                                 >
                                     <option value="operator">Оператор</option>
-                                    <option value="admin">Администратор</option>
+                                    <option value="admin">Адміністратор</option>
                                 </select>
                             </div>
                             <div>
-                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: 'var(--fw-text-muted)' }}>Описание</label>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, marginBottom: '6px', color: 'var(--fw-text-muted)' }}>Опис</label>
                                 <input
                                     className="input-field"
                                     type="text"
                                     value={form.description}
-                                    placeholder="Например: Оператор дежурной смены"
+                                    placeholder="Наприклад: Оператор чергової зміни"
                                     onChange={e => setForm({ ...form, description: e.target.value })}
                                     style={{ width: '100%', padding: '10px 14px', fontSize: '15px' }}
                                 />
                             </div>
                         </div>
                         <button type="submit" className="btn-primary" style={{ padding: '12px 32px', fontSize: '15px' }}>
-                            ✅ Создать пользователя
+                            ✅ Створити користувача
                         </button>
                     </form>
                 </div>
@@ -152,11 +154,11 @@ export default function UsersPage() {
             <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
-                        <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--fw-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Логин</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--fw-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Роль</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '13px', fontWeight: 600, color: 'var(--fw-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Описание</th>
-                            <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: '13px', fontWeight: 600, color: 'var(--fw-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', width: '100px' }}>Действия</th>
+                        <tr style={{ background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--fw-primary)' }}>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>ІМ'Я КОРИСТУВАЧА</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>РІВЕНЬ ДОСТУПУ</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>ОПИС</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', width: '100px' }}>ДІЇ</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -168,13 +170,15 @@ export default function UsersPage() {
                                 <td style={{ padding: '14px 20px' }}>
                                     <span style={{
                                         padding: '4px 12px',
-                                        borderRadius: '20px',
-                                        fontSize: '12px',
-                                        fontWeight: 600,
-                                        background: u.role === 'admin' ? 'rgba(168,85,247,0.2)' : 'rgba(59,130,246,0.2)',
-                                        color: u.role === 'admin' ? '#a855f7' : '#3b82f6',
+                                        borderRadius: 'var(--fw-radius-sm)',
+                                        fontSize: '11px',
+                                        fontWeight: 700,
+                                        letterSpacing: '1px',
+                                        background: u.role === 'admin' ? 'rgba(0,210,255,0.1)' : 'rgba(0,255,136,0.1)',
+                                        color: u.role === 'admin' ? 'var(--fw-primary)' : 'var(--fw-success)',
+                                        border: `1px solid ${u.role === 'admin' ? 'var(--fw-primary)' : 'var(--fw-success)'}`
                                     }}>
-                                        {u.role === 'admin' ? '🔑 Админ' : '👁 Оператор'}
+                                        {u.role === 'admin' ? '[ АДМІН ]' : '[ ЮЗЕР ]'}
                                     </span>
                                 </td>
                                 <td style={{ padding: '14px 20px', fontSize: '14px', color: 'var(--fw-text-muted)' }}>
@@ -193,7 +197,7 @@ export default function UsersPage() {
                                             fontSize: '13px',
                                         }}
                                     >
-                                        🗑️ Удалить
+                                        🗑️ Видалити
                                     </button>
                                 </td>
                             </tr>
@@ -201,13 +205,13 @@ export default function UsersPage() {
                         {users.length === 0 && (
                             <tr>
                                 <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: 'var(--fw-text-dim)', fontSize: '15px' }}>
-                                    Нет пользователей
+                                    Немає користувачів
                                 </td>
                             </tr>
                         )}
                     </tbody>
                 </table>
             </div>
-        </div>
+        </div >
     );
 }

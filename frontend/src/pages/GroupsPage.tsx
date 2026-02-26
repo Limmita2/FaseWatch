@@ -13,15 +13,17 @@ export default function GroupsPage() {
 
     return (
         <div className="animate-fade-in">
-            <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>👥 Telegram-групи</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
+                [ ДЖЕРЕЛА TELEGRAM ]
+            </h1>
             <div className="glass-card table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>Назва</th>
-                            <th>Telegram ID</th>
-                            <th>Статус бота</th>
-                            <th>Останнє повідомлення</th>
+                            <th>НАЗВА КАНАЛУ</th>
+                            <th>TG_ID</th>
+                            <th>СТАТУС БОТА</th>
+                            <th>ОСТАННІЙ ПІНГ</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -31,7 +33,7 @@ export default function GroupsPage() {
                                 <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)' }}>{g.telegram_id || '—'}</td>
                                 <td>
                                     <span className={`badge ${g.bot_active ? 'badge-success' : 'badge-danger'}`}>
-                                        {g.bot_active ? '🟢 Активний' : '🔴 Неактивний'}
+                                        {g.bot_active ? '[ АКТИВНО ]' : '[ ОФЛАЙН ]'}
                                     </span>
                                 </td>
                                 <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)' }}>
@@ -39,7 +41,7 @@ export default function GroupsPage() {
                                 </td>
                             </tr>
                         ))}
-                        {groups.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--fw-text-dim)', padding: '24px' }}>Груп поки немає</td></tr>}
+                        {groups.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--fw-text-dim)', padding: '24px' }}>Джерел поки немає</td></tr>}
                     </tbody>
                 </table>
             </div>

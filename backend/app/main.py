@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.models.models import User, UserRole
 from app.services.qdrant_service import ensure_collection_exists
 
-from app.api.endpoints import auth, messages, persons, queue, search, groups, imports, webhook, bot_receiver, users, input
+from app.api.endpoints import auth, messages, search, groups, imports, webhook, bot_receiver, users, input
 
 
 @asynccontextmanager
@@ -71,8 +71,6 @@ except Exception:
 # Роуты
 app.include_router(auth.router, prefix="/api/auth", tags=["Авторизация"])
 app.include_router(messages.router, prefix="/api/messages", tags=["Сообщения"])
-app.include_router(persons.router, prefix="/api/persons", tags=["Персоны"])
-app.include_router(queue.router, prefix="/api/queue", tags=["Очередь идентификации"])
 app.include_router(search.router, prefix="/api/search", tags=["Поиск"])
 app.include_router(groups.router, prefix="/api/groups", tags=["Группы"])
 app.include_router(imports.router, prefix="/api/import", tags=["Импорт"])
@@ -87,17 +85,12 @@ async def dashboard():
     """Статистика для дашборда."""
     from sqlalchemy import select, func
     from app.core.database import AsyncSessionLocal
-    from app.models.models import Group, Message, Face, Person, IdentificationQueue, IdentificationStatus
+    from app.models.models import Group, Message, Face
 
     async with AsyncSessionLocal() as session:
         groups_count = (await session.execute(select(func.count(Group.id)))).scalar()
         messages_count = (await session.execute(select(func.count(Message.id)))).scalar()
         faces_count = (await session.execute(select(func.count(Face.id)))).scalar()
-        persons_count = (await session.execute(select(func.count(Person.id)))).scalar()
-        pending_count = (await session.execute(
-            select(func.count(IdentificationQueue.id))
-            .where(IdentificationQueue.status == IdentificationStatus.pending)
-        )).scalar()
 
         # Последние 10 сообщений
         recent = await session.execute(
@@ -121,8 +114,6 @@ async def dashboard():
         "groups": groups_count or 0,
         "messages": messages_count or 0,
         "faces": faces_count or 0,
-        "persons": persons_count or 0,
-        "pending_identifications": pending_count or 0,
         "recent_messages": recent_messages,
     }
 

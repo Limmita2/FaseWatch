@@ -80,7 +80,9 @@ export default function SearchPage() {
 
     return (
         <div className="animate-fade-in">
-            <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>🔍 Пошук</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
+                [ ПОШУКОВА МАТРИЦЯ ]
+            </h1>
 
             <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
                 <button className={tab === 'photo' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('photo')}>📷 За фото</button>
@@ -91,14 +93,14 @@ export default function SearchPage() {
                 <div>
                     <div {...getRootProps()} className={`dropzone ${isDragActive ? 'active' : ''}`} style={{ marginBottom: '20px' }}>
                         <input {...getInputProps()} />
-                        <p style={{ fontSize: '16px', marginBottom: '8px' }}>📸 Перетягніть фото сюди або натисніть для вибору</p>
-                        <p style={{ fontSize: '13px' }}>Система знайде схожі обличчя у базі (top-20)</p>
+                        <p style={{ fontSize: '16px', marginBottom: '8px', color: 'var(--fw-primary)', letterSpacing: '1px' }}>[ ПЕРЕТЯГНІТЬ ФОТО АБО НАТИСНІТЬ ДЛЯ ЗАВАНТАЖЕННЯ ]</p>
+                        <p style={{ fontSize: '13px', textTransform: 'uppercase' }}>Система розпізнає обличчя та знайде топ-20 збігів</p>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', padding: '12px', background: 'var(--fw-card-bg)', borderRadius: 'var(--fw-radius)' }}>
-                        <span style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>Порог схожості:</span>
-                        <input type="range" min={0} max={100} value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ flex: 1 }} />
-                        <span style={{ fontSize: '14px', fontWeight: 600, minWidth: '40px' }}>{threshold}%</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', padding: '16px', background: 'rgba(10, 10, 18, 0.5)', border: '1px solid var(--fw-primary)', borderRadius: 'var(--fw-radius)', boxShadow: 'inset 0 0 10px rgba(0,210,255,0.1)' }}>
+                        <span style={{ fontSize: '14px', whiteSpace: 'nowrap', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '1px', color: 'var(--fw-primary)' }}>Поріг схожості:</span>
+                        <input type="range" min={0} max={100} value={threshold} onChange={e => setThreshold(Number(e.target.value))} style={{ flex: 1, accentColor: 'var(--fw-primary)' }} />
+                        <span style={{ fontSize: '16px', fontWeight: 800, minWidth: '40px', color: 'var(--fw-accent)', textShadow: 'var(--fw-glow-accent)' }}>{threshold}%</span>
                     </div>
 
                     {previewUrl && (
@@ -119,8 +121,8 @@ export default function SearchPage() {
                             {/* Selectable Face Portraits */}
                             {photoResults && photoResults.results?.length > 1 && selectedFaceIndex === null && imgDims && (
                                 <div style={{ marginTop: '24px' }}>
-                                    <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>📸 Виявлено декілька облич</h3>
-                                    <p style={{ color: 'var(--fw-text-dim)', marginBottom: '16px' }}>Оберіть людину, для якої виконати пошук:</p>
+                                    <h3 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '8px', color: 'var(--fw-primary)', textTransform: 'uppercase' }}>[ ВИЯВЛЕНО ДЕКІЛЬКА ОБЛИЧ ]</h3>
+                                    <p style={{ color: 'var(--fw-text-dim)', marginBottom: '16px', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px' }}>Оберіть обличчя для аналізу:</p>
 
                                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                                         {photoResults.results.map((r: any, i: number) => {
@@ -189,10 +191,10 @@ export default function SearchPage() {
 
                     {photoResults && !loading && (
                         <div>
-                            <p style={{ color: 'var(--fw-text-muted)', marginBottom: '16px' }}>
+                            <p style={{ color: 'var(--fw-text-muted)', marginBottom: '16px', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px' }}>
                                 {photoResults.faces_detected > 0
-                                    ? `✅ Знайдено облич на фото: ${photoResults.faces_detected}`
-                                    : '⚠️ На фото не знайдено жодного обличчя. Спробуйте інше фото.'}
+                                    ? `[ V ] ПРОСКАНОВАНО ОБЛИЧ: ${photoResults.faces_detected}`
+                                    : '[ X ] ОБЛИЧЧЯ НЕ ЗНАЙДЕНО. СПРОБУЙТЕ ІНШЕ ФОТО.'}
                             </p>
 
                             {photoResults.results?.length > 1 && selectedFaceIndex === null && (
@@ -208,10 +210,10 @@ export default function SearchPage() {
                                 return (
                                     <div key={i} style={{ marginBottom: '24px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                            <h3 style={{ fontSize: '18px', fontWeight: 600 }}>Результати для обличчя #{i + 1}</h3>
+                                            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--fw-accent)', textShadow: 'var(--fw-glow-accent)', textTransform: 'uppercase' }}>{`> РЕЗУЛЬТАТИ ЗБІГУ ДЛЯ ОБЛИЧЧЯ #${i + 1}`}</h3>
                                             {photoResults.results.length > 1 && (
-                                                <button className="btn-secondary" style={{ padding: '6px 14px', fontSize: '13px' }} onClick={() => setSelectedFaceIndex(null)}>
-                                                    ← Назад до вибору
+                                                <button className="btn-secondary" style={{ padding: '6px 14px', fontSize: '12px' }} onClick={() => setSelectedFaceIndex(null)}>
+                                                    &larr; СКАСУВАТИ АНАЛІЗ ТА ПОВЕРНУТИСЬ
                                                 </button>
                                             )}
                                         </div>
@@ -248,9 +250,9 @@ export default function SearchPage() {
                                             ))}
                                         </div>
                                         {(!face.matches || face.matches.length === 0) && (
-                                            <div className="glass-card" style={{ padding: '24px', textAlign: 'center', marginTop: '12px' }}>
-                                                <p style={{ color: 'var(--fw-text-dim)', fontSize: '16px', marginBottom: '8px' }}>🔍 Збігів не знайдено</p>
-                                                <p style={{ color: 'var(--fw-text-dim)', fontSize: '14px' }}>Це обличчя не знайдено в базі. Спробуйте знизити порог схожості.</p>
+                                            <div className="glass-card" style={{ padding: '24px', textAlign: 'center', marginTop: '12px', borderLeft: '4px solid var(--fw-warning)' }}>
+                                                <p style={{ color: 'var(--fw-warning)', fontSize: '16px', marginBottom: '8px', fontWeight: 700, textTransform: 'uppercase' }}>[ ЗБІГІВ У БАЗІ НЕ ЗНАЙДЕНО ]</p>
+                                                <p style={{ color: 'var(--fw-text-dim)', fontSize: '14px' }}>Обличчя відсутнє у векторах або поріг схожості занадто високий.</p>
                                             </div>
                                         )}
                                     </div>

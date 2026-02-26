@@ -32,13 +32,12 @@ def save_photo_to_qnap(
 
 def save_face_crop_to_qnap(
     face_crop: np.ndarray,
-    person_id: str,
     face_id: str,
 ) -> str:
     """Сохраняет кроп лица на QNAP.
-    Структура: /faces/{person_id}/{face_id}.jpg
+    Структура: /faces/{face_id}.jpg
     """
-    base = get_qnap_path() / "faces" / person_id
+    base = get_qnap_path() / "faces"
     base.mkdir(parents=True, exist_ok=True)
     file_path = base / f"{face_id}.jpg"
     img = Image.fromarray(face_crop[:, :, ::-1])  # BGR -> RGB

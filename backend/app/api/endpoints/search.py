@@ -15,7 +15,7 @@ import logging
 import onnxruntime as ort
 
 from app.core.database import get_db
-from app.models.models import Message, Face, Person, Group
+from app.models.models import Message, Face, Group
 from app.services.qdrant_service import ensure_collection_exists, search_similar_faces
 from app.api.deps import get_current_user
 
@@ -155,14 +155,11 @@ async def search_by_face(
 
     # Собираем все уникальные ID из Qdrant результатов
     msg_ids = set()
-    person_ids = set()
     face_ids = set()
     for match in similar:
         p = match.payload
         if p.get("message_id"):
             msg_ids.add(uuid.UUID(p["message_id"]))
-        if p.get("person_id"):
-            person_ids.add(uuid.UUID(p["person_id"]))
         if p.get("face_id"):
             face_ids.add(uuid.UUID(p["face_id"]))
 
@@ -173,12 +170,6 @@ async def search_by_face(
         for m in result.scalars().all():
             messages_map[str(m.id)] = m
 
-    # 2) Batch: все персоны
-    persons_map = {}
-    if person_ids:
-        result = await db.execute(select(Person).where(Person.id.in_(person_ids)))
-        for p in result.scalars().all():
-            persons_map[str(p.id)] = p
 
     # 3) Batch: все лица (crop_path)
     faces_map = {}
@@ -196,23 +187,9 @@ async def search_by_face(
             groups_map[str(g.id)] = g
 
     # 5) Batch: контекстные сообщения (before/after) для всех матчей
-    # Для каждого сообщения нам нужны ±5 по timestamp в той же группе
     context_map = {}  # msg_id -> {"before": [...], "after": [...]}
     if messages_map:
-        # Собираем условия для контекста
-        context_conditions_before = []
-        context_conditions_after = []
-        for msg in messages_map.values():
-            if msg.group_id and msg.timestamp:
-                context_conditions_before.append(
-                    and_(Message.group_id == msg.group_id, Message.timestamp < msg.timestamp)
-                )
-                context_conditions_after.append(
-                    and_(Message.group_id == msg.group_id, Message.timestamp > msg.timestamp)
-                )
-
-        # Загружаем контекст для каждого матча (нельзя UNION с LIMIT per group в SQL,
-        # но можно загрузить по отдельности — это всё равно быстрее чем последовательно)
+        # Загружаем контекст для каждого матча
         for msg_id_str, msg in messages_map.items():
             if not msg.timestamp or not msg.group_id:
                 context_map[msg_id_str] = {"before": [], "after": []}
@@ -221,13 +198,27 @@ async def search_by_face(
             before_q, after_q = await asyncio.gather(
                 db.execute(
                     select(Message)
-                    .where(Message.group_id == msg.group_id, Message.timestamp < msg.timestamp)
-                    .order_by(Message.timestamp.desc()).limit(5)
+                    .where(
+                        Message.group_id == msg.group_id,
+                        or_(
+                            Message.timestamp < msg.timestamp,
+                            and_(Message.timestamp == msg.timestamp, Message.created_at < msg.created_at)
+                        )
+                    )
+                    .order_by(Message.timestamp.desc(), Message.created_at.desc())
+                    .limit(5)
                 ),
                 db.execute(
                     select(Message)
-                    .where(Message.group_id == msg.group_id, Message.timestamp > msg.timestamp)
-                    .order_by(Message.timestamp.asc()).limit(5)
+                    .where(
+                        Message.group_id == msg.group_id,
+                        or_(
+                            Message.timestamp > msg.timestamp,
+                            and_(Message.timestamp == msg.timestamp, Message.created_at > msg.created_at)
+                        )
+                    )
+                    .order_by(Message.timestamp.asc(), Message.created_at.asc())
+                    .limit(5)
                 ),
             )
             context_map[msg_id_str] = {
@@ -249,7 +240,6 @@ async def search_by_face(
     for match in similar:
         payload = match.payload
         msg_id = payload.get("message_id")
-        person_id = payload.get("person_id")
         face_id_str = payload.get("face_id")
 
         # Контекст из предзагруженных данных
@@ -267,11 +257,6 @@ async def search_by_face(
                 "after": [ser(m) for m in ctx["after"]],
             }
 
-        # Персона из предзагруженных данных
-        person_data = None
-        if person_id and person_id in persons_map:
-            person = persons_map[person_id]
-            person_data = {"id": str(person.id), "display_name": person.display_name}
 
         # Crop path из предзагруженных данных
         face_crop_path = None
@@ -280,7 +265,7 @@ async def search_by_face(
 
         face_results.append({
             "similarity": round(match.score * 100, 1),
-            "person": person_data,
+            "person": None,
             "face_id": face_id_str,
             "crop_path": face_crop_path,
             "photo_path": matched_photo_path,
@@ -342,23 +327,41 @@ async def search_by_text(
 
     results_data = []
     for msg, gname in rows:
-        # Fetch context: 3 before, 1 after
-        before = await db.execute(
-            select(Message)
-            .where(Message.group_id == msg.group_id, Message.timestamp < msg.timestamp)
-            .order_by(Message.timestamp.desc()).limit(3)
+        # Fetch context: 5 before, 5 after with tie-breaker
+        before_q, after_q = await asyncio.gather(
+            db.execute(
+                select(Message)
+                .where(
+                    Message.group_id == msg.group_id,
+                    or_(
+                        Message.timestamp < msg.timestamp,
+                        and_(Message.timestamp == msg.timestamp, Message.created_at < msg.created_at)
+                    )
+                )
+                .order_by(Message.timestamp.desc(), Message.created_at.desc())
+                .limit(5)
+            ),
+            db.execute(
+                select(Message)
+                .where(
+                    Message.group_id == msg.group_id,
+                    or_(
+                        Message.timestamp > msg.timestamp,
+                        and_(Message.timestamp == msg.timestamp, Message.created_at > msg.created_at)
+                    )
+                )
+                .order_by(Message.timestamp.asc(), Message.created_at.asc())
+                .limit(5)
+            )
         )
-        after = await db.execute(
-            select(Message)
-            .where(Message.group_id == msg.group_id, Message.timestamp > msg.timestamp)
-            .order_by(Message.timestamp.asc()).limit(1)
-        )
+        before = before_q.scalars().all()
+        after = after_q.scalars().all()
         
         context = {
             "group_name": gname,
-            "before": [ser(m) for m in reversed(before.scalars().all())],
+            "before": [ser(m) for m in reversed(before)],
             "message": ser(msg),
-            "after": [ser(m) for m in after.scalars().all()],
+            "after": [ser(m) for m in after],
         }
         
         results_data.append({

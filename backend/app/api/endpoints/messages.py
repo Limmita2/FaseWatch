@@ -10,7 +10,7 @@ from pydantic import BaseModel
 import uuid
 
 from app.core.database import get_db
-from app.models.models import Message, Group, Face, IdentificationQueue
+from app.models.models import Message, Group, Face
 from app.api.deps import get_current_user, require_admin
 
 router = APIRouter()
@@ -140,9 +140,6 @@ async def delete_message(
     # Удаляем связанные очереди и лица
     faces = await db.execute(select(Face).where(Face.message_id == mid))
     for face in faces.scalars().all():
-        queues = await db.execute(select(IdentificationQueue).where(IdentificationQueue.face_id == face.id))
-        for q in queues.scalars().all():
-            await db.delete(q)
         await db.delete(face)
 
     await db.delete(msg)

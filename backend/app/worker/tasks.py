@@ -91,8 +91,8 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
     try:
         import cv2
 
-        from app.models.models import Face, Person, IdentificationQueue, IdentificationStatus, Message
-        from app.services.qdrant_service import ensure_collection_exists, upsert_face_vector, search_similar_faces
+        from app.models.models import Face, Message
+        from app.services.qdrant_service import ensure_collection_exists, upsert_face_vector
         from app.services.storage_service import save_face_crop_to_qnap
 
         # Celery передаёт все параметры как строки (JSON) — конвертируем в UUID
@@ -124,55 +124,22 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
             bbox = face_data.bbox.tolist()
             confidence = float(face_data.det_score)
 
-            # Поиск похожих лиц в Qdrant
-            similar = search_similar_faces(qdrant_client, vector, top_k=1, score_threshold=0.0)
-
-            person_id_uuid = None  # UUID объект для БД
-            person_id_str = None   # строка для payload Qdrant
-
-            if similar and similar[0].score >= settings.FACE_SIMILARITY_THRESHOLD:
-                # Автоматически привязываем к совпавшему лицу
-                matched_person_id_str = similar[0].payload.get("person_id")
-                matched_person_id_uuid = uuid.UUID(matched_person_id_str) if matched_person_id_str else None
-
-                # Создаём Face запись сразу с person_id
-                face = Face(
-                    id=uuid.uuid4(),
-                    person_id=matched_person_id_uuid,
-                    message_id=message.id,
-                    bbox=bbox,
-                    confidence=confidence,
-                )
-                session.add(face)
-                session.flush()
-
-                person_id_str = matched_person_id_str
-                person_id_uuid = matched_person_id_uuid
-            else:
-                # Новая персона
-                new_person_id = uuid.uuid4()
-                person = Person(id=new_person_id)
-                session.add(person)
-                session.flush()
-                person_id_uuid = new_person_id
-                person_id_str = str(new_person_id)
-
-                face = Face(
-                    id=uuid.uuid4(),
-                    person_id=person_id_uuid,  # UUID объект
-                    message_id=message.id,
-                    bbox=bbox,
-                    confidence=confidence,
-                )
-                session.add(face)
-                session.flush()
+            # Создаём Face запись
+            face = Face(
+                id=uuid.uuid4(),
+                message_id=message.id,
+                bbox=bbox,
+                confidence=confidence,
+            )
+            session.add(face)
+            session.flush()
 
             # Сохраняем кроп лица на QNAP
             try:
                 x1, y1, x2, y2 = [int(c) for c in bbox]
                 crop = img[y1:y2, x1:x2]
                 if crop.size > 0:
-                    crop_path = save_face_crop_to_qnap(crop, person_id_str, str(face.id))
+                    crop_path = save_face_crop_to_qnap(crop, str(face.id))
                     face.crop_path = crop_path
             except Exception as crop_err:
                 logger.warning("Не удалось сохранить кроп: %s", crop_err)
@@ -184,14 +151,13 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
                 vector=vector,
                 payload={
                     "face_id": str(face.id),
-                    "person_id": person_id_str,
                     "message_id": message_id,
                     "group_id": group_id,
                     "timestamp": timestamp_str,
                 },
             )
             face.qdrant_point_id = uuid.UUID(point_id)
-            results.append({"face_id": str(face.id), "person_id": person_id_str, "score": confidence})
+            results.append({"face_id": str(face.id), "score": confidence})
 
         session.commit()
         logger.info("Обработано %d лиц для message_id=%s", len(results), message_id)

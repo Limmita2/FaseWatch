@@ -23,7 +23,9 @@ export default function MessagesPage() {
 
     return (
         <div className="animate-fade-in">
-            <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '24px' }}>💬 Стрічка повідомлень</h1>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
+                [ СТРІЧКА ПОВІДОМЛЕНЬ ]
+            </h1>
 
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
                 <select className="input-field" style={{ width: '200px' }} value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setPage(1); }}>
@@ -50,7 +52,7 @@ export default function MessagesPage() {
                                 </span>
                                 {msg.has_photo && <span>📷</span>}
                             </div>
-                            {msg.text && <p style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--fw-text)' }}>{msg.text}</p>}
+                            {msg.text && <p style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--fw-text)', fontFamily: `'Courier New', Courier, monospace` }}>{msg.text}</p>}
                             {msg.photo_path && (
                                 <img
                                     src={`/files/${msg.photo_path.replace(/^\/mnt\/qnap_photos\//, '')}`}
@@ -66,9 +68,9 @@ export default function MessagesPage() {
             )}
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '20px' }}>
-                <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← Назад</button>
-                <span style={{ padding: '10px', color: 'var(--fw-text-muted)', fontSize: '14px' }}>Сторінка {page}</span>
-                <button className="btn-secondary" disabled={messages.length < 50} onClick={() => setPage(p => p + 1)}>Далі →</button>
+                <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>← ПОПЕРЕДНЯ СТОРІНКА</button>
+                <span style={{ padding: '10px', color: 'var(--fw-primary)', fontSize: '14px', fontWeight: 700 }}>СТОРІНКА {page}</span>
+                <button className="btn-secondary" disabled={messages.length < 50} onClick={() => setPage(p => p + 1)}>НАСТУПНА СТОРІНКА →</button>
             </div>
         </div>
     );

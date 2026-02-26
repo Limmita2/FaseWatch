@@ -110,29 +110,45 @@ async def import_backup(
     # Распаковываем ZIP во временную директорию
     tmp_dir = tempfile.mkdtemp()
     try:
-        contents = await file.read()
         zip_path = os.path.join(tmp_dir, "backup.zip")
         with open(zip_path, "wb") as f:
-            f.write(contents)
+            shutil.copyfileobj(file.file, f)
 
         with zipfile.ZipFile(zip_path, "r") as z:
             z.extractall(tmp_dir)
 
-        # Ищем messages.html
-        html_path = None
+        # Ищем все файлы вида messages*.html
+        export_dir = None
+        html_files = []
         for root, dirs, files in os.walk(tmp_dir):
-            if "messages.html" in files:
-                html_path = os.path.join(root, "messages.html")
-                photos_dir = os.path.join(root, "photos")
-                break
+            for file_name in files:
+                if re.match(r"^messages.*\.html$", file_name):
+                    export_dir = root
+                    html_files.append(file_name)
 
-        if not html_path:
-            raise HTTPException(status_code=400, detail="messages.html не найден в архиве")
+        if not export_dir or not html_files:
+            raise HTTPException(status_code=400, detail="Файлы сообщений (messages*.html) не найдены в архиве")
 
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_content = f.read()
+        # Функция для сортировки файлов (messages.html -> 0, messages2.html -> 2)
+        def sort_key(filename):
+            match = re.search(r"messages(\d*)\.html", filename)
+            if not match:
+                return 0
+            num_str = match.group(1)
+            return int(num_str) if num_str else 0
 
-        messages_data = parse_telegram_messages_html(html_content, photos_dir if os.path.exists(photos_dir) else "")
+        html_files.sort(key=sort_key)
+        photos_dir = os.path.join(export_dir, "photos")
+
+        messages_data = []
+        for html_file in html_files:
+            html_path = os.path.join(export_dir, html_file)
+            with open(html_path, "r", encoding="utf-8") as f:
+                html_content = f.read()
+            # Добавляем распарсенные сообщения к общему списку
+            messages_data.extend(
+                parse_telegram_messages_html(html_content, photos_dir if os.path.exists(photos_dir) else "")
+            )
 
         # Сохраняем сообщения в БД и фото на QNAP
         stats = {"messages": 0, "photos": 0, "faces_queued": 0}
@@ -142,7 +158,8 @@ async def import_backup(
             photo_qnap_path = None
 
             if has_photo and os.path.exists(photos_dir):
-                src_photo = os.path.join(os.path.dirname(html_path), msg_data["photo_rel_path"])
+                # Ищем фото относительно export_dir
+                src_photo = os.path.join(export_dir, msg_data["photo_rel_path"])
                 if os.path.isfile(src_photo):
                     ts_str = msg_data["timestamp"].strftime("%Y-%m") if msg_data["timestamp"] else "unknown"
                     dest_dir = Path(settings.QNAP_MOUNT_PATH) / "photos" / str(group.id) / ts_str
