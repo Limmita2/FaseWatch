@@ -243,8 +243,12 @@ export default function SearchPage() {
                                                         />
                                                     </div>
 
-                                                    <div style={{ fontWeight: 600, fontSize: '13px', textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--fw-text)' }}>
-                                                        {match.person?.display_name || `Персона ${match.person?.id?.slice(0, 8) || '—'}`}
+                                                    <div
+                                                        style={{ marginTop: '4px', fontSize: '11px', textAlign: 'center', color: 'var(--fw-text-dim)', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '4px', userSelect: 'text', cursor: 'text' }}
+                                                        onClick={(e) => { e.stopPropagation(); }}
+                                                        title="Скопіювати ID фото"
+                                                    >
+                                                        ID: {(match.photo_path || match.crop_path || '').split('/').pop()}
                                                     </div>
                                                 </div>
                                             ))}
@@ -317,11 +321,9 @@ export default function SearchPage() {
                                             Схожість: {expandedMatch.similarity}%
                                         </div>
                                     )}
-                                    {expandedMatch.person && (
-                                        <div style={{ textAlign: 'center', color: 'var(--fw-text-muted)', fontSize: '18px' }}>
-                                            {expandedMatch.person.display_name || `Персона ${expandedMatch.person.id?.slice(0, 8) || '—'}`}
-                                        </div>
-                                    )}
+                                    <div style={{ textAlign: 'center', color: 'var(--fw-text-dim)', fontSize: '14px', background: 'rgba(0,0,0,0.2)', padding: '8px 16px', borderRadius: '6px', userSelect: 'all' }} onClick={e => e.stopPropagation()}>
+                                        ID: {(expandedMatch.photo_path || expandedMatch.crop_path || '').split('/').pop()}
+                                    </div>
                                 </div>
                             )}
 

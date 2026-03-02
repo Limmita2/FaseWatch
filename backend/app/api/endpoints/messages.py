@@ -3,7 +3,7 @@ Endpoint GET/POST для сообщений с фильтрацией.
 """
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from typing import Optional, List
 from datetime import datetime
 from pydantic import BaseModel
@@ -77,6 +77,51 @@ async def list_messages(
             imported_from_backup=msg.imported_from_backup,
         ))
     return out
+
+
+@router.get("/find_page")
+async def find_message_page(
+    photo_id: str,
+    group_id: Optional[str] = Query(None),
+    only_with_photo: bool = Query(False),
+    limit: int = Query(50, le=200),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """
+    Находит страницу для сообщения с заданным photo_id.
+    photo_id - подстрока пути к фото.
+    """
+    filters = [Message.photo_path.like(f"%{photo_id}%")]
+    if group_id:
+        filters.append(Message.group_id == uuid.UUID(group_id))
+    if only_with_photo:
+        filters.append(Message.has_photo == True)
+        
+    stmt = select(Message).where(and_(*filters))
+    result = await db.execute(stmt)
+    msg = result.scalar_one_or_none()
+    
+    if not msg:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Сообщение с таким ID фото не найдено")
+        
+    # Считаем количество сообщений, которые новее данного сообщения (так как сортировка desc)
+    count_filters = []
+    if group_id:
+        count_filters.append(Message.group_id == uuid.UUID(group_id))
+    if only_with_photo:
+        count_filters.append(Message.has_photo == True)
+        
+    count_filters.append(Message.timestamp > msg.timestamp)
+    
+    count_stmt = select(func.count()).select_from(Message).where(and_(*count_filters))
+    count_result = await db.execute(count_stmt)
+    newer_count = count_result.scalar() or 0
+    
+    page = (newer_count // limit) + 1
+    
+    return {"page": page, "message_id": str(msg.id)}
 
 
 @router.get("/{message_id}/context")

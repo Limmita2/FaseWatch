@@ -45,6 +45,7 @@ export const dashboardApi = {
 // ===== Messages =====
 export const messagesApi = {
     list: (params?: Record<string, string | number | boolean>) => api.get('/messages/', { params }),
+    findPage: (params: { photo_id: string, group_id?: string, only_with_photo?: boolean, limit?: number }) => api.get('/messages/find_page', { params }),
     context: (id: string) => api.get(`/messages/${id}/context`),
     delete: (id: string) => api.delete(`/messages/${id}`),
 };
