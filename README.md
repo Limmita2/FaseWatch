@@ -6,4 +6,4 @@
 Запустите скрипт через Docker одной командой (указав путь к файлу изнутри контейнера и название группы, в которую идет импорт):
 docker compose exec backend python import_local.py /mnt/qnap_photos/backup/my_huge_chat.zip --group "Моя Огромная Группа"
 
-docker compose exec backend python import_local.py /mnt/qnap_photos/backup/1.zip --group "Кропивницький Архив"
+Важно на будущее: при изменениях кода backend всегда нужно делать 'docker compose build backend && docker compose up -d backend', а не просто restart.

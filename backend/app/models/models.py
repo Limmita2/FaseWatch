@@ -2,7 +2,7 @@ import uuid
 import enum
 from sqlalchemy import (
     Column, String, Boolean, Float, BigInteger, Text,
-    ForeignKey, Enum, TIMESTAMP, JSON, Uuid
+    ForeignKey, Enum, TIMESTAMP, JSON, Uuid, Index
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -50,7 +50,12 @@ class Message(Base):
     group = relationship("Group", back_populates="messages")
     faces = relationship("Face", back_populates="message")
 
-
+    __table_args__ = (
+        Index("ix_messages_group_timestamp", "group_id", "timestamp"),
+        Index("ix_messages_group_created", "group_id", "created_at"),
+        Index("ix_messages_timestamp", "timestamp"),
+        Index("ix_messages_has_photo", "has_photo"),
+    )
 
 class Face(Base):
     __tablename__ = "faces"
@@ -65,6 +70,10 @@ class Face(Base):
 
     message = relationship("Message", back_populates="faces")
 
+    __table_args__ = (
+        Index("ix_faces_message_id", "message_id"),
+        Index("ix_faces_qdrant_point_id", "qdrant_point_id"),
+    )
 
 
 class User(Base):

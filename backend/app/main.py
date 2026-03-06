@@ -43,6 +43,15 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass  # Qdrant может быть недоступен при запуске
 
+    # Прогрев InsightFace — загружаем модель при старте, не при первом запросе
+    try:
+        import asyncio as _asyncio
+        from app.api.endpoints.search import _get_face_app
+        await _asyncio.to_thread(_get_face_app)
+        print("InsightFace модель загружена при старте (warm-up OK)")
+    except Exception as e:
+        print(f"InsightFace warm-up: {e}")
+
     yield
 
 
@@ -56,7 +65,12 @@ app = FastAPI(
 # CORS — разрешаем frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost",
+        "http://127.0.0.1",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

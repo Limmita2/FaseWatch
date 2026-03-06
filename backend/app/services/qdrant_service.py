@@ -20,6 +20,17 @@ def ensure_collection_exists():
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
+        # Payload-индексы для быстрой фильтрации при поиске
+        client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="message_id",
+            field_schema="keyword",
+        )
+        client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="face_id",
+            field_schema="keyword",
+        )
     return client
 
 
