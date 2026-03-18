@@ -14,6 +14,7 @@ export default function SearchPage() {
     const [searchError, setSearchError] = useState<string | null>(null);
     const [statusMsg, setStatusMsg] = useState<string | null>(null);
     const [expandedMatch, setExpandedMatch] = useState<any>(null);
+    const [contextLoading, setContextLoading] = useState(false);
     const [selectedFaceIndex, setSelectedFaceIndex] = useState<number | null>(null);
     const [imgDims, setImgDims] = useState<{ w: number, h: number, natW: number, natH: number } | null>(null);
     const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -223,7 +224,17 @@ export default function SearchPage() {
                                                     key={j}
                                                     className="glass-card"
                                                     style={{ padding: '8px', cursor: 'pointer', position: 'relative', display: 'flex', flexDirection: 'column' }}
-                                                    onClick={() => setExpandedMatch(match)}
+                                                    onClick={async () => {
+                                                        setExpandedMatch({ ...match, context: null });
+                                                        setContextLoading(true);
+                                                        try {
+                                                            const { data } = await searchApi.getFaceContext(match.face_id);
+                                                            setExpandedMatch((prev: any) => prev ? { ...prev, context: data.context } : null);
+                                                        } catch {
+                                                            setExpandedMatch((prev: any) => prev ? { ...prev, context: null } : null);
+                                                        }
+                                                        setContextLoading(false);
+                                                    }}
                                                 >
                                                     {/* Percentage Badge Overlay */}
                                                     <div style={{
@@ -374,6 +385,11 @@ export default function SearchPage() {
                                                 {!msg.text && !msg.photo_path && msg.has_photo && '📷 Фото (не завантажено)'}
                                             </div>
                                         ))}
+                                    </div>
+                                ) : contextLoading ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '16px' }}>
+                                        <div className="spinner" />
+                                        <p style={{ color: 'var(--fw-text-muted)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '1px' }}>Завантаження контексту...</p>
                                     </div>
                                 ) : (
                                     <div style={{ color: 'var(--fw-text-dim)', padding: '20px', textAlign: 'center', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>

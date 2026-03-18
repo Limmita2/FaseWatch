@@ -194,64 +194,9 @@ async def search_by_face(
             groups_map[str(g.id)] = g
 
     t_db = time.time()
-    logger.info("TIMING db_batch=%.2fs msgs=%d", t_db - t_qdrant, len(messages_map))
+    logger.info("TIMING db_batch=%.2fs msgs=%d total=%.2fs", t_db - t_qdrant, len(messages_map), t_db - t_start)
 
-    # 5) Индекс-оптимизированная последовательная загрузка контекста
-    # Вместо создания десятков сессий и исчерпания пула соединений БД,
-    # используем текущую сессию `db`. Простые запросы по индексу займут ~1мс каждый.
-    async def _fetch_ctx(msg_id_str: str, msg) -> tuple:
-        if not msg.timestamp or not msg.group_id:
-            return msg_id_str, {"before": [], "after": []}
-        
-        before_q = await db.execute(
-            select(Message)
-            .where(
-                Message.group_id == msg.group_id,
-                Message.timestamp <= msg.timestamp
-            )
-            .order_by(Message.timestamp.desc())
-            .limit(6)
-        )
-        b_list = before_q.scalars().all()
-        
-        after_q = await db.execute(
-            select(Message)
-            .where(
-                Message.group_id == msg.group_id,
-                Message.timestamp >= msg.timestamp
-            )
-            .order_by(Message.timestamp.asc())
-            .limit(6)
-        )
-        a_list = after_q.scalars().all()
-        
-        before = [m for m in b_list if str(m.id) != str(msg.id)][:5]
-        after = [m for m in a_list if str(m.id) != str(msg.id)][:5]
-        
-        return msg_id_str, {
-            "before": list(reversed(before)),
-            "after": list(after),
-        }
-
-    context_map = {}
-    if messages_map:
-        for mid, msg in messages_map.items():
-            _, ctx = await _fetch_ctx(mid, msg)
-            context_map[mid] = ctx
-
-    t_ctx = time.time()
-    logger.info("TIMING context_indexed=%.2fs total=%.2fs", t_ctx - t_db, t_ctx - t_start)
-
-
-    # ── Сборка результатов (без лишних SQL запросов) ──
-
-    def ser(m):
-        return {
-            "id": str(m.id), "text": m.text, "has_photo": m.has_photo,
-            "photo_path": m.photo_path,
-            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
-            "sender_name": m.sender_name,
-        }
+    # ── Сборка лёгких результатов (без контекста — он загружается по клику) ──
 
     face_results = []
     for match in similar:
@@ -259,34 +204,24 @@ async def search_by_face(
         msg_id = payload.get("message_id")
         face_id_str = payload.get("face_id")
 
-        # Контекст из предзагруженных данных
-        context = None
         matched_photo_path = None
+        group_name = None
         if msg_id and msg_id in messages_map:
             msg = messages_map[msg_id]
             matched_photo_path = msg.photo_path
             group = groups_map.get(str(msg.group_id)) if msg.group_id else None
-            ctx = context_map.get(msg_id, {"before": [], "after": []})
-            context = {
-                "group_name": group.name if group else None,
-                "before": [ser(m) for m in ctx["before"]],
-                "message": ser(msg),
-                "after": [ser(m) for m in ctx["after"]],
-            }
+            group_name = group.name if group else None
 
-
-        # Crop path из предзагруженных данных
         face_crop_path = None
         if face_id_str and face_id_str in faces_map:
             face_crop_path = faces_map[face_id_str].crop_path
 
         face_results.append({
             "similarity": round(match.score * 100, 1),
-            "person": None,
             "face_id": face_id_str,
             "crop_path": face_crop_path,
             "photo_path": matched_photo_path,
-            "context": context,
+            "group_name": group_name,
         })
 
     # Собираем финальный массив results
@@ -311,6 +246,76 @@ async def search_by_face(
         "results": final_results
     }
 
+
+
+@router.get("/face/{face_id}/context")
+async def get_face_context(
+    face_id: str,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    """
+    Lazy-load контекста для конкретного совпавшего лица.
+    Возвращает ±5 сообщений вокруг сообщения, к которому привязано лицо.
+    """
+    # 1) Найти Face → message_id
+    face_uuid = uuid.UUID(face_id)
+    face_result = await db.execute(select(Face).where(Face.id == face_uuid))
+    face = face_result.scalar_one_or_none()
+    if not face or not face.message_id:
+        return {"context": None}
+
+    # 2) Загрузить Message
+    msg_result = await db.execute(select(Message).where(Message.id == face.message_id))
+    msg = msg_result.scalar_one_or_none()
+    if not msg:
+        return {"context": None}
+
+    # 3) Загрузить Group
+    group = None
+    if msg.group_id:
+        g_result = await db.execute(select(Group).where(Group.id == msg.group_id))
+        group = g_result.scalar_one_or_none()
+
+    # 4) Загрузить контекст ±5 сообщений (индексированные запросы)
+    def ser(m):
+        return {
+            "id": str(m.id), "text": m.text, "has_photo": m.has_photo,
+            "photo_path": m.photo_path,
+            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+            "sender_name": m.sender_name,
+        }
+
+    before = []
+    after = []
+    if msg.timestamp and msg.group_id:
+        before_q = await db.execute(
+            select(Message)
+            .where(Message.group_id == msg.group_id, Message.timestamp <= msg.timestamp)
+            .order_by(Message.timestamp.desc())
+            .limit(6)
+        )
+        b_list = before_q.scalars().all()
+        before = [m for m in b_list if str(m.id) != str(msg.id)][:5]
+        before = list(reversed(before))
+
+        after_q = await db.execute(
+            select(Message)
+            .where(Message.group_id == msg.group_id, Message.timestamp >= msg.timestamp)
+            .order_by(Message.timestamp.asc())
+            .limit(6)
+        )
+        a_list = after_q.scalars().all()
+        after = [m for m in a_list if str(m.id) != str(msg.id)][:5]
+
+    return {
+        "context": {
+            "group_name": group.name if group else None,
+            "before": [ser(m) for m in before],
+            "message": ser(msg),
+            "after": [ser(m) for m in after],
+        }
+    }
 
 
 @router.get("/text")
