@@ -48,6 +48,15 @@ def main():
     )
     print("  ✓ face_id индекс создан")
 
+    # Создаём payload-индекс по group_id
+    print("Создаю payload-индекс: group_id...")
+    client.create_payload_index(
+        collection_name=COLLECTION_NAME,
+        field_name="group_id",
+        field_schema="keyword",
+    )
+    print("  ✓ group_id индекс создан")
+
     # Проверяем результат
     info_after = client.get_collection(COLLECTION_NAME)
     schema = getattr(info_after, 'payload_schema', {})

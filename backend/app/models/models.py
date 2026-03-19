@@ -2,7 +2,7 @@ import uuid
 import enum
 from sqlalchemy import (
     Column, String, Boolean, Float, BigInteger, Text,
-    ForeignKey, Enum, TIMESTAMP, JSON, Uuid, Index
+    ForeignKey, Enum, TIMESTAMP, JSON, Uuid, Index, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -55,6 +55,7 @@ class Message(Base):
         Index("ix_messages_group_created", "group_id", "created_at"),
         Index("ix_messages_timestamp", "timestamp"),
         Index("ix_messages_has_photo", "has_photo"),
+        UniqueConstraint("group_id", "telegram_message_id", name="uq_group_telegram_msg"),
     )
 
 class Face(Base):

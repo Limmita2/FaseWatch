@@ -41,6 +41,18 @@ async def receive_bot_message(
         db.add(group)
         await db.flush()
 
+    # Дедупликация: проверка, есть ли уже это сообщение от бота
+    tg_msg_id = int(message_id) if message_id.isdigit() else None
+    if tg_msg_id is not None:
+        dup = await db.execute(
+            select(Message).where(
+                Message.group_id == group.id,
+                Message.telegram_message_id == tg_msg_id
+            )
+        )
+        if dup.scalar_one_or_none():
+            return {"ok": True, "duplicate": True}
+
     # Обработка timestamp — конвертируем UTC из Telegram в Europe/Kyiv
     ts = None
     try:
@@ -65,7 +77,7 @@ async def receive_bot_message(
     msg = Message(
         id=uuid.uuid4(),
         group_id=group.id,
-        telegram_message_id=int(message_id) if message_id.isdigit() else None,
+        telegram_message_id=tg_msg_id,
         sender_telegram_id=int(sender_telegram_id) if sender_telegram_id.isdigit() else None,
         sender_name=sender_name or None,
         text=text or None,

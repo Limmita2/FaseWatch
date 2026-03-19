@@ -77,7 +77,7 @@ def _get_session():
         from sqlalchemy import create_engine
         from sqlalchemy.orm import sessionmaker
         sync_db_url = settings.DATABASE_URL.replace("mysql+aiomysql", "mysql+pymysql")
-        _engine = create_engine(sync_db_url, pool_pre_ping=True)
+        _engine = create_engine(sync_db_url, pool_pre_ping=True, pool_size=20, max_overflow=30)
         _SessionLocal = sessionmaker(bind=_engine)
     return _SessionLocal()
 
