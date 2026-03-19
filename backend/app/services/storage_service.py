@@ -35,9 +35,11 @@ def save_face_crop_to_qnap(
     face_id: str,
 ) -> str:
     """Сохраняет кроп лица на QNAP.
-    Структура: /faces/{face_id}.jpg
+    Структура: /faces/{shard}/{face_id}.jpg
+    Шардирование по первым 2 символам UUID для масштабирования (до миллионов файлов).
     """
-    base = get_qnap_path() / "faces"
+    shard = face_id[:2]
+    base = get_qnap_path() / "faces" / shard
     base.mkdir(parents=True, exist_ok=True)
     file_path = base / f"{face_id}.jpg"
     img = Image.fromarray(face_crop[:, :, ::-1])  # BGR -> RGB

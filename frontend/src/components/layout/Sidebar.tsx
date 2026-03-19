@@ -25,7 +25,7 @@ export default function Sidebar() {
     return (
         <aside className="sidebar">
             <div className="sidebar-logo" style={{ marginBottom: '40px' }}>
-                <span style={{ fontSize: '24px', letterSpacing: '4px' }}>FASEWATCH</span>
+                <span style={{ fontSize: '24px', letterSpacing: '4px' }}>FACEWATCH</span>
             </div>
             <nav className="sidebar-nav">
                 {visibleItems.map(item => (

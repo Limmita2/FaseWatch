@@ -137,7 +137,7 @@ Telegram группа → Bot (aiogram, polling) → POST /api/bot/message → B
 process_photo task:
     1. Открывает фото с QNAP (cv2.imread)
     2. InsightFace.get() → обнаружение лиц, генерация 512-dim вектора
-    3. Сохраняет кроп лица на QNAP (/faces/{face_id}.jpg)
+    3. Сохраняет кроп лица на QNAP (/faces/{shard}/{face_id}.jpg)
     4. upsert вектор в Qdrant (payload: face_id, message_id, group_id)
 ```
 
@@ -168,7 +168,7 @@ process_photo task:
 | POST | `/api/users` | Создание пользователя |
 | DELETE | `/api/users/{id}` | Удаление пользователя |
 | POST | `/api/input` | Ручной ввод фото для обработки |
-| POST | `/api/bot/message` | Приём сообщений от Telegram бота |
+| POST | `/api/bot/message` | Приём данных от Telegram бота (и сторонних серверов, авто-создание групп) |
 | POST | `/webhook/telegram` | Webhook для Telegram (не используется, бот в polling) |
 
 ## Docker Compose — сервисы
@@ -218,7 +218,7 @@ process_photo task:
 ```
 /mnt/qnap_photos/
 ├── photos/{group_id}/{YYYY-MM}/{message_id}_{timestamp}.jpg   # оригиналы
-├── faces/{face_id}.jpg                                        # кропы лиц
+├── faces/{shard}/{face_id}.jpg                                # кропы лиц (шардированы по 2 символам UUID)
 ├── backups/
 │   ├── mariadb/fasewatch_db_YYYY-MM-DD_HH-MM-SS.sql.gz       # бэкапы MariaDB
 │   └── qdrant/qdrant_faces_YYYY-MM-DD_HH-MM-SS.snapshot       # бэкапы Qdrant
@@ -266,6 +266,9 @@ docker compose build backend && docker compose up -d backend
 # Миграции БД (внутри контейнера backend)
 docker exec -it facewatch_backend alembic revision --autogenerate -m "description"
 docker exec -it facewatch_backend alembic upgrade head
+
+# Обновление индексов Qdrant
+docker exec -it facewatch_backend python apply_qdrant_indexes.py
 
 # Локальная разработка фронтенда
 cd frontend && npm install && npm run dev  # → http://localhost:5173
