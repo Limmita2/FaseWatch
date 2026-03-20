@@ -94,26 +94,27 @@ FaseWatch/
 
 ```
 ┌──────────┐     ┌──────────────┐     ┌─────────┐
-│  Group   │────<│   Message    │────<│  Face    │
-│          │     │              │     │          │
+│  Group   │────<│   Message    │────<│  Face   │
+│          │     │              │     │         │
 │ id (UUID)│     │ id (UUID)    │     │ id (UUID)│
 │ telegram_│     │ group_id (FK)│     │ message_id (FK)│
 │ name     │     │ telegram_msg │     │ crop_path      │
 │ bot_activ│     │ sender_name  │     │ qdrant_point_id│
-│ created  │     │ text         │     │ bbox (JSON)    │
-│          │     │ has_photo    │     │ confidence     │
+│ is_public│     │ text         │     │ bbox (JSON)    │
+│ created  │     │ has_photo    │     │ confidence     │
 │          │     │ photo_path   │     │ created_at     │
 │          │     │ timestamp    │     └─────────┘
 │          │     │ imported_from│
 │          │     │ created_at   │     ┌─────────┐
 │          │     └──────────────┘     │  User   │
-└──────────┘                          │         │
-                                      │ id (UUID)│
+│          │                          │         │
+└──────────┘                          │ id (UUID)│
                                       │ username │
                                       │ password │
                                       │ role     │
                                       │ descript │
-                                      └─────────┘
+                                      │ last_ip  │
+                                      │ allowed_ip
 ```
 
 ### Ключевые индексы (Message)
@@ -210,8 +211,9 @@ process_photo task:
 - **Хеширование:** bcrypt
 - **Хранение на фронте:** `localStorage` (token, role)
 - **Стейт:** Zustand (`useAuthStore`)
-- **Роли:** `admin`, `operator`
+- **Роли:** `admin` (полный доступ), `operator` (скрыты группы с `is_public=False`)
 - **Истечение:** настраивается через `JWT_EXPIRE_HOURS`
+- **Ограничение по IP:** В БД хранится `allowed_ip` (маска) и `last_ip`. Логин через API валидирует IP-адрес клиента с использованием `fnmatch` (звездочки).
 
 ## Хранилище файлов (QNAP)
 

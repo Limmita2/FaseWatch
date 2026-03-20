@@ -59,13 +59,28 @@ def search_similar_faces(
     vector: list[float],
     top_k: int = 5,
     score_threshold: float = 0.0,
+    group_ids: list[str] = None,
 ):
     """Ищет похожие лица в Qdrant (qdrant-client >= 1.17.0)."""
+    from qdrant_client.models import Filter, FieldCondition, MatchAny
+
+    query_filter = None
+    if group_ids is not None:
+        query_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="group_id",
+                    match=MatchAny(any=group_ids)
+                )
+            ]
+        )
+
     result = client.query_points(
         collection_name=COLLECTION_NAME,
         query=vector,
         limit=top_k,
         score_threshold=score_threshold if score_threshold > 0 else None,
+        query_filter=query_filter,
     )
     return result.points
 

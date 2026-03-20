@@ -28,6 +28,8 @@ class UserOut(BaseModel):
     username: str
     role: str
     description: Optional[str] = None
+    last_ip: Optional[str] = None
+    allowed_ip: str
 
     class Config:
         from_attributes = True
@@ -49,6 +51,8 @@ async def list_users(
             username=u.username,
             role=u.role.value,
             description=u.description,
+            last_ip=u.last_ip,
+            allowed_ip=u.allowed_ip,
         )
         for u in users
     ]
@@ -87,7 +91,28 @@ async def create_user(
         username=user.username,
         role=user.role.value,
         description=user.description,
+        last_ip=user.last_ip,
+        allowed_ip=user.allowed_ip,
     )
+
+class UserIpUpdate(BaseModel):
+    allowed_ip: str
+
+@router.patch("/{user_id}/ip")
+async def update_user_ip(
+    user_id: str,
+    body: UserIpUpdate,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_admin),
+):
+    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+        
+    user.allowed_ip = body.allowed_ip
+    await db.commit()
+    return {"id": user_id, "allowed_ip": user.allowed_ip}
 
 
 @router.delete("/{user_id}")

@@ -40,7 +40,7 @@ async def list_messages(
     page: int = Query(1, ge=1),
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     filters = []
     if group_id:
@@ -52,9 +52,12 @@ async def list_messages(
     if date_to:
         filters.append(Message.timestamp <= date_to)
 
+    if user.role != "admin":
+        filters.append(Group.is_public == True)
+
     stmt = (
         select(Message, Group.name.label("group_name"))
-        .join(Group, Message.group_id == Group.id, isouter=True)
+        .join(Group, Message.group_id == Group.id, isouter=False if user.role != "admin" else True)
         .where(and_(*filters) if filters else True)
         .order_by(Message.timestamp.desc())
         .offset((page - 1) * limit)
@@ -86,7 +89,7 @@ async def find_message_page(
     only_with_photo: bool = Query(False),
     limit: int = Query(50, le=200),
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     """
     Находит страницу для сообщения с заданным photo_id.
@@ -98,7 +101,11 @@ async def find_message_page(
     if only_with_photo:
         filters.append(Message.has_photo == True)
         
-    stmt = select(Message).where(and_(*filters))
+    stmt = select(Message)
+    if user.role != "admin":
+        stmt = stmt.join(Group, Message.group_id == Group.id).where(Group.is_public == True)
+
+    stmt = stmt.where(and_(*filters))
     result = await db.execute(stmt)
     msg = result.scalar_one_or_none()
     

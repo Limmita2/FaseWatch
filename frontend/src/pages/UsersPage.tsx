@@ -6,6 +6,8 @@ interface User {
     username: string;
     role: string;
     description?: string;
+    last_ip?: string;
+    allowed_ip: string;
 }
 
 export default function UsersPage() {
@@ -54,6 +56,18 @@ export default function UsersPage() {
             setTimeout(() => setSuccess(''), 3000);
         } catch (err: any) {
             setError(err.response?.data?.detail || 'Помилка видалення');
+        }
+    };
+
+    const handleUpdateIp = async (id: string, newIp: string) => {
+        try {
+            await usersApi.updateIp(id, newIp);
+            setSuccess('Налаштування IP оновлено');
+            setTimeout(() => setSuccess(''), 2000);
+            setUsers(users.map(u => u.id === id ? { ...u, allowed_ip: newIp } : u));
+        } catch (err: any) {
+            setError(err.response?.data?.detail || 'Помилка оновлення IP');
+            setTimeout(() => setError(''), 3000);
         }
     };
 
@@ -158,6 +172,7 @@ export default function UsersPage() {
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>ІМ'Я КОРИСТУВАЧА</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>РІВЕНЬ ДОСТУПУ</th>
                             <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>ОПИС</th>
+                            <th style={{ padding: '14px 20px', textAlign: 'center', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px' }}>IP ДОСТУП</th>
                             <th style={{ padding: '14px 20px', textAlign: 'right', fontSize: '11px', fontWeight: 700, color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', width: '100px' }}>ДІЇ</th>
                         </tr>
                     </thead>
@@ -184,6 +199,31 @@ export default function UsersPage() {
                                 <td style={{ padding: '14px 20px', fontSize: '14px', color: 'var(--fw-text-muted)' }}>
                                     {u.description || '—'}
                                 </td>
+                                <td style={{ padding: '14px 20px', textAlign: 'center' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+                                        <input
+                                            type="text"
+                                            className="input-field"
+                                            defaultValue={u.allowed_ip}
+                                            onBlur={(e) => {
+                                                if (e.target.value !== u.allowed_ip) {
+                                                    handleUpdateIp(u.id, e.target.value);
+                                                }
+                                            }}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.currentTarget.blur();
+                                                }
+                                            }}
+                                            placeholder="*"
+                                            style={{ width: '140px', padding: '6px 10px', fontSize: '13px', textAlign: 'center', fontWeight: 'bold' }}
+                                            title="Дозволений IP або підмережа (напр. 192.168.1.* або *)"
+                                        />
+                                        <span style={{ fontSize: '11px', color: 'var(--fw-text-dim)', whiteSpace: 'nowrap' }}>
+                                            Останній: {u.last_ip || 'Нема даних'}
+                                        </span>
+                                    </div>
+                                </td>
                                 <td style={{ padding: '14px 20px', textAlign: 'right' }}>
                                     <button
                                         onClick={() => handleDelete(u.id, u.username)}
@@ -204,7 +244,7 @@ export default function UsersPage() {
                         ))}
                         {users.length === 0 && (
                             <tr>
-                                <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: 'var(--fw-text-dim)', fontSize: '15px' }}>
+                                <td colSpan={5} style={{ padding: '40px', textAlign: 'center', color: 'var(--fw-text-dim)', fontSize: '15px' }}>
                                     Немає користувачів
                                 </td>
                             </tr>

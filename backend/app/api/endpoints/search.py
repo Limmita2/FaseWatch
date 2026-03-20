@@ -86,7 +86,7 @@ async def search_by_face(
     threshold: int = Query(50, ge=0, le=100),
     face_index: Optional[int] = Query(None, ge=0),
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     """
     Поиск по фото:
@@ -140,7 +140,15 @@ async def search_by_face(
     vector = face_to_process.embedding.tolist()
 
     score_threshold = threshold / 100.0
-    similar = search_similar_faces(qdrant_client, vector, top_k=top_k, score_threshold=score_threshold)
+    
+    allowed_group_ids = None
+    if user.role != "admin":
+        g_res = await db.execute(select(Group.id).where(Group.is_public == True))
+        allowed_group_ids = [str(gid) for gid in g_res.scalars().all()]
+        if not allowed_group_ids:
+            return {"faces_detected": len(detected_faces), "requires_selection": False, "results": []}
+
+    similar = search_similar_faces(qdrant_client, vector, top_k=top_k, score_threshold=score_threshold, group_ids=allowed_group_ids)
 
     t_qdrant = time.time()
     logger.info("TIMING qdrant=%.2fs results=%d", t_qdrant - t_detect, len(similar))
@@ -324,7 +332,7 @@ async def search_by_text(
     page: int = Query(1, ge=1),
     limit: int = Query(20, le=100),
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
     """Полнотекстовый поиск по полю text сообщений (FULLTEXT MATCH AGAINST)."""
     offset = (page - 1) * limit
@@ -332,29 +340,22 @@ async def search_by_text(
     # FULLTEXT поиск — используем сырой SQL MATCH AGAINST для MariaDB
     # Экранируем запрос, убираем спецсимволы boolean mode
     safe_q = q.replace("'", "''").replace("+", "").replace("-", "").replace("*", "").replace("(", "").replace(")", "")
+    
     stmt = (
         select(Message, Group.name.label("group_name"))
-        .join(Group, Message.group_id == Group.id, isouter=True)
-        .where(
-            text("MATCH(messages.text) AGAINST(:q IN BOOLEAN MODE)")
-        )
-        .order_by(Message.timestamp.desc())
-        .offset(offset)
-        .limit(limit)
+        .join(Group, Message.group_id == Group.id, isouter=False)
     )
+    if user.role != "admin":
+        stmt = stmt.where(Group.is_public == True)
+
+    stmt_ft = stmt.where(text("MATCH(messages.text) AGAINST(:q IN BOOLEAN MODE)")).order_by(Message.timestamp.desc()).offset(offset).limit(limit)
+    
     try:
-        result = await db.execute(stmt, {"q": safe_q})
+        result = await db.execute(stmt_ft, {"q": safe_q})
         rows = result.all()
     except Exception:
         # Fallback на LIKE если FULLTEXT-индекс ещё не создан
-        stmt_fallback = (
-            select(Message, Group.name.label("group_name"))
-            .join(Group, Message.group_id == Group.id, isouter=True)
-            .where(Message.text.like(f"%{q}%"))
-            .order_by(Message.timestamp.desc())
-            .offset(offset)
-            .limit(limit)
-        )
+        stmt_fallback = stmt.where(Message.text.like(f"%{q}%")).order_by(Message.timestamp.desc()).offset(offset).limit(limit)
         result = await db.execute(stmt_fallback)
         rows = result.all()
 

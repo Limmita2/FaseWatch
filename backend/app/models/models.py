@@ -27,6 +27,7 @@ class Group(Base):
     telegram_id = Column(BigInteger, unique=True, nullable=True)
     name = Column(Text, nullable=False)
     bot_active = Column(Boolean, default=True)
+    is_public = Column(Boolean, default=True, server_default='1', nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     messages = relationship("Message", back_populates="group")
@@ -85,4 +86,6 @@ class User(Base):
     password_hash = Column(Text, nullable=False)
     role = Column(Enum(UserRole), default=UserRole.operator)
     description = Column(Text, nullable=True)
+    last_ip = Column(String(50), nullable=True)
+    allowed_ip = Column(String(50), default="*", server_default="*", nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())

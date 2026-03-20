@@ -85,6 +85,7 @@ export const queueApi = {
 export const groupsApi = {
     list: () => api.get('/groups/'),
     delete: (id: string) => api.delete(`/groups/${id}`),
+    toggleVisibility: (id: string) => api.patch(`/groups/${id}/toggle-public`),
 };
 
 // ===== Import =====
@@ -104,6 +105,7 @@ export const usersApi = {
     create: (data: { username: string; password: string; role: string; description?: string }) =>
         api.post('/users/', data),
     delete: (id: string) => api.delete(`/users/${id}`),
+    updateIp: (id: string, allowed_ip: string) => api.patch(`/users/${id}/ip`, { allowed_ip }),
 };
 
 // ===== Input =====

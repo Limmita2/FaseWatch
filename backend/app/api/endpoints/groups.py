@@ -19,6 +19,7 @@ class GroupOut(BaseModel):
     telegram_id: Optional[int] = None
     name: str
     bot_active: bool
+    is_public: bool = True
     last_message_at: Optional[str] = None
 
     class Config:
@@ -28,9 +29,14 @@ class GroupOut(BaseModel):
 @router.get("/", response_model=List[GroupOut])
 async def list_groups(
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    user=Depends(get_current_user),
 ):
-    result = await db.execute(select(Group).order_by(Group.created_at.desc()))
+    stmt = select(Group)
+    if user.role != "admin":
+        stmt = stmt.where(Group.is_public == True)
+    stmt = stmt.order_by(Group.created_at.desc())
+    
+    result = await db.execute(stmt)
     groups = result.scalars().all()
     out = []
     for g in groups:
@@ -46,9 +52,34 @@ async def list_groups(
             telegram_id=g.telegram_id,
             name=g.name,
             bot_active=g.bot_active,
+            is_public=g.is_public,
             last_message_at=last_ts.isoformat() if last_ts else None,
         ))
     return out
+
+
+@router.patch("/{group_id}/toggle-public")
+async def toggle_group_public(
+    group_id: str,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(require_admin),
+):
+    """Изменение видимости группы. Только для юзера с логином admin."""
+    from fastapi import HTTPException
+    import uuid
+    
+    if user.username != "admin":
+        raise HTTPException(status_code=403, detail="Только пользователь admin может менять видимость")
+
+    gid = uuid.UUID(group_id)
+    result = await db.execute(select(Group).where(Group.id == gid))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Группа не найдена")
+
+    group.is_public = not group.is_public
+    await db.commit()
+    return {"id": group_id, "is_public": group.is_public}
 
 
 @router.delete("/{group_id}")
