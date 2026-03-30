@@ -15,8 +15,9 @@ import logging
 import onnxruntime as ort
 
 from app.core.database import get_db, AsyncSessionLocal
-from app.models.models import Message, Face, Group
+from app.models.models import Message, Face, Group, MessagePhone
 from app.services.qdrant_service import ensure_collection_exists, search_similar_faces
+from app.services.phone_utils import extract_phones as extract_phones_util
 from app.api.deps import get_current_user
 
 router = APIRouter()
@@ -434,6 +435,113 @@ async def search_by_text(
 
     return {
         "query": q,
+        "total": len(rows),
+        "results": results_data,
+    }
+
+
+@router.get("/phone")
+async def search_by_phone(
+    q: str = Query(..., min_length=3),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=200),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Поиск по номеру телефона (нормализует ввод пользователя)."""
+    import re
+    # Нормализуем входной номер: оставляем только цифры
+    digits = re.sub(r'\D', '', q)
+    
+    if not digits or len(digits) < 3:
+        return {"query": q, "total": 0, "results": []}
+
+    # Пробуем нормализовать как полный номер
+    phones = extract_phones_util(q)
+    if phones:
+        search_phone = phones[0]
+    else:
+        # Используем как частичный поиск
+        search_phone = digits
+
+    offset = (page - 1) * limit
+
+    stmt = (
+        select(Message, Group.name.label("group_name"))
+        .join(MessagePhone, MessagePhone.message_id == Message.id)
+        .join(Group, Message.group_id == Group.id)
+    )
+    if user.role != "admin":
+        stmt = stmt.where(Group.is_public == True)
+
+    stmt = stmt.where(MessagePhone.phone.like(f"%{search_phone}%"))
+    stmt = stmt.distinct().order_by(Message.timestamp.desc()).offset(offset).limit(limit)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    if not rows:
+        return {"query": q, "normalized": search_phone, "total": 0, "results": []}
+
+    def ser(m):
+        return {
+            "id": str(m.id), "text": m.text, "has_photo": m.has_photo,
+            "photo_path": m.photo_path,
+            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+            "sender_name": m.sender_name,
+        }
+
+    results_data = []
+    for msg, gname in rows:
+        # Получаем номера для этого сообщения
+        phones_res = await db.execute(select(MessagePhone.phone).where(MessagePhone.message_id == msg.id))
+        msg_phones = [p[0] for p in phones_res.all()]
+
+        # Контекст: 3 до и 3 после
+        context = None
+        if msg.timestamp and msg.group_id:
+            before_q = await db.execute(
+                select(Message)
+                .where(Message.group_id == msg.group_id, Message.timestamp <= msg.timestamp)
+                .order_by(Message.timestamp.desc())
+                .limit(4)
+            )
+            b_list = before_q.scalars().all()
+            before = [m for m in b_list if str(m.id) != str(msg.id)][:3]
+            before = list(reversed(before))
+
+            after_q = await db.execute(
+                select(Message)
+                .where(Message.group_id == msg.group_id, Message.timestamp >= msg.timestamp)
+                .order_by(Message.timestamp.asc())
+                .limit(4)
+            )
+            a_list = after_q.scalars().all()
+            after = [m for m in a_list if str(m.id) != str(msg.id)][:3]
+
+            context = {
+                "group_name": gname,
+                "before": [ser(m) for m in before],
+                "message": ser(msg),
+                "after": [ser(m) for m in after],
+            }
+
+        results_data.append({
+            "id": str(msg.id),
+            "group_id": str(msg.group_id),
+            "group_name": gname,
+            "text": msg.text,
+            "has_photo": msg.has_photo,
+            "photo_path": msg.photo_path,
+            "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+            "sender_name": msg.sender_name,
+            "phones": msg_phones,
+            "context": context,
+        })
+
+    return {
+        "query": q,
+        "normalized": search_phone,
         "total": len(rows),
         "results": results_data,
     }

@@ -9,7 +9,7 @@ import logging
 import httpx
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.types import ContentType
+from aiogram.types import ContentType, InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 
 # Настройка логирования
@@ -24,9 +24,36 @@ load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 BACKEND_API_URL = os.getenv("BACKEND_API_URL", "http://backend:8000")
+ADMIN_ID = 67838716
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
+
+pending_notified_groups = set()
+
+async def check_and_notify_approval(result: dict, group_telegram_id: str, group_name: str):
+    """Отправляет запрос администратору, если группа еще не одобрена."""
+    if result and not result.get("ok") and result.get("status") == "pending_approval":
+        if group_telegram_id not in pending_notified_groups:
+            pending_notified_groups.add(group_telegram_id)
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Схвалити", callback_data=f"approve_{group_telegram_id}"),
+                    InlineKeyboardButton(text="❌ Відхилити", callback_data=f"reject_{group_telegram_id}")
+                ]
+            ])
+            text_msg = (
+                f"🛡 <b>Запит на підключення нової групи/користувача</b>\n"
+                f"Назва: <b>{group_name}</b>\n"
+                f"ID: <code>{group_telegram_id}</code>"
+            )
+            try:
+                await bot.send_message(ADMIN_ID, text_msg, parse_mode="HTML", reply_markup=keyboard)
+                logger.info(f"Відправлено запит адміну на схвалення групи {group_telegram_id}")
+            except Exception as e:
+                logger.error(f"Не вдалося відправити повідомлення адміну: {e}")
+        return True
+    return False
 
 async def send_to_backend(endpoint: str, data: dict, files: dict = None):
     """Отправляет данные на backend API с retry при ошибках сети."""
@@ -82,6 +109,7 @@ async def handle_photo(message: types.Message):
     files = {"photo": ("photo.jpg", file_bytes.read(), "image/jpeg")}
     result = await send_to_backend("/api/bot/message", data, files)
     logger.info(f"📸 Фото обработано: {result}")
+    await check_and_notify_approval(result, str(message.chat.id), message.chat.title or message.chat.full_name or "Unknown")
 
 
 @dp.message(F.content_type == ContentType.TEXT)
@@ -113,6 +141,26 @@ async def handle_text(message: types.Message):
 
     result = await send_to_backend("/api/bot/message", data)
     logger.info(f"💬 Текст обработан: {result}")
+    await check_and_notify_approval(result, str(message.chat.id), message.chat.title or "Unknown")
+
+
+@dp.callback_query(F.data.startswith("approve_") | F.data.startswith("reject_"))
+async def process_approval(callback: types.CallbackQuery):
+    """Обработка кнопок одобрения/отклонения администратором."""
+    action, group_id = callback.data.split("_", 1)
+    
+    endpoint = f"/api/bot/{action}"
+    logger.info(f"Отправка решения {action} по группе {group_id} на бекенд...")
+    resp = await send_to_backend(endpoint, data={"group_telegram_id": group_id})
+    
+    if resp and resp.get("ok"):
+        text = f"✅ Група {group_id} <b>схвалена</b>!" if action == "approve" else f"❌ Група {group_id} <b>відхилена</b>!"
+        await callback.message.edit_text(text, parse_mode="HTML")
+        if group_id in pending_notified_groups:
+            pending_notified_groups.remove(group_id)
+    else:
+        await callback.answer("Помилка зв'язку з бекендом!", show_alert=True)
+    await callback.answer()
 
 
 @dp.message(F.content_type == ContentType.NEW_CHAT_MEMBERS)

@@ -1,12 +1,33 @@
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useSearchParams } from 'react-router-dom';
 import { searchApi } from '@/services/api';
 
 export default function SearchPage() {
-    const [tab, setTab] = useState<'photo' | 'text'>('photo');
+    const [tab, setTab] = useState<'photo' | 'text' | 'phone'>('photo');
     const [textQuery, setTextQuery] = useState('');
+    const [phoneQuery, setPhoneQuery] = useState('');
     const [textResults, setTextResults] = useState<any[]>([]);
+    const [phoneResults, setPhoneResults] = useState<any[]>([]);
+    const [searchParams] = useSearchParams();
+
+    // Авто-перехід на вкладку телефону з URL (при навігації з /messages)
+    useEffect(() => {
+        const urlTab = searchParams.get('tab');
+        const urlQ = searchParams.get('q');
+        if (urlTab === 'phone' && urlQ) {
+            setTab('phone');
+            setPhoneQuery(urlQ);
+            // Запускаємо пошук автоматично
+            (async () => {
+                try {
+                    const { data } = await searchApi.byPhone(urlQ);
+                    setPhoneResults(data.results || []);
+                } catch { setPhoneResults([]); }
+            })();
+        }
+    }, [searchParams]);
     const [photoResults, setPhotoResults] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -79,6 +100,41 @@ export default function SearchPage() {
         setLoading(false);
     };
 
+    const handlePhoneSearch = async () => {
+        if (!phoneQuery.trim()) return;
+        setLoading(true);
+        try {
+            const { data } = await searchApi.byPhone(phoneQuery);
+            setPhoneResults(data.results || []);
+        } catch { setPhoneResults([]); }
+        setLoading(false);
+    };
+
+    // Підсвічування телефонних номерів у тексті
+    const highlightPhones = (text: string | null | undefined) => {
+        if (!text) return null;
+        // Точний Regex для українських номерів
+        const phoneRegex = /(?<!\d)((?:\+?38)?(?:[\s\-(]*?)0(?:[\s\-)]*?)(?:39|50|63|66|67|68|73|91|92|93|94|95|96|97|98|99)(?:[\s\-)]*?\d){7})(?!\d)/g;
+        const parts = text.split(phoneRegex);
+        return parts.map((part, i) => {
+            if (phoneRegex.test(part)) {
+                // Reset lastIndex after test
+                phoneRegex.lastIndex = 0;
+                return <span key={i} style={{ color: '#22c55e', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); setPhoneQuery(part.replace(/[^\d+]/g, '')); setTab('phone'); setTimeout(() => handlePhoneSearchDirect(part.replace(/[^\d+]/g, '')), 100); }} title="Шукати цей номер">{part}</span>;
+            }
+            return part;
+        });
+    };
+
+    const handlePhoneSearchDirect = async (q: string) => {
+        setLoading(true);
+        try {
+            const { data } = await searchApi.byPhone(q);
+            setPhoneResults(data.results || []);
+        } catch { setPhoneResults([]); }
+        setLoading(false);
+    };
+
     return (
         <div className="animate-fade-in">
             <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
@@ -88,6 +144,7 @@ export default function SearchPage() {
             <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
                 <button className={tab === 'photo' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('photo')}>📷 За фото</button>
                 <button className={tab === 'text' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('text')}>📝 За текстом</button>
+                <button className={tab === 'phone' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('phone')}>📱 За телефоном</button>
             </div>
 
             {tab === 'photo' && (
@@ -304,10 +361,63 @@ export default function SearchPage() {
                                         {r.timestamp ? new Date(r.timestamp).toLocaleString('uk-UA') : ''}
                                     </span>
                                 </div>
-                                <p style={{ fontSize: '14px' }}>{r.text}</p>
+                                <p style={{ fontSize: '14px' }}>{highlightPhones(r.text)}</p>
                             </div>
                         ))}
                         {textResults.length === 0 && !loading && textQuery && <p style={{ color: 'var(--fw-text-dim)', textAlign: 'center', padding: '24px' }}>Нічого не знайдено</p>}
+                    </div>
+                </div>
+            )}
+
+            {tab === 'phone' && (
+                <div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                        <input className="input-field" placeholder="Введіть номер телефону..." value={phoneQuery} onChange={e => setPhoneQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handlePhoneSearch()} />
+                        <button className="btn-primary" onClick={handlePhoneSearch}>Шукати</button>
+                    </div>
+
+                    {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}><div className="spinner" /></div>}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {phoneResults.map((r: any) => (
+                            <div
+                                key={r.id}
+                                className="glass-card"
+                                style={{ padding: '14px', cursor: 'pointer', transition: 'border-color 0.2s', border: '1px solid transparent', display: 'flex', gap: '16px' }}
+                                onClick={() => setExpandedMatch({ ...r, similarity: null })}
+                                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--fw-primary, #3b82f6)'}
+                                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                            >
+                                {r.photo_path && (
+                                    <div style={{ flexShrink: 0, width: '80px', height: '80px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
+                                        <img
+                                            src={`/files/${(r.photo_path || '').replace(/^\/mnt\/qnap_photos\//, '')}`}
+                                            alt="photo"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                        />
+                                    </div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                        <span className="badge badge-primary">{r.group_name || '—'}</span>
+                                        {r.sender_name && <span style={{ fontSize: '13px', fontWeight: 500 }}>{r.sender_name}</span>}
+                                        <span style={{ fontSize: '12px', color: 'var(--fw-text-dim)', marginLeft: 'auto' }}>
+                                            {r.timestamp ? new Date(r.timestamp).toLocaleString('uk-UA') : ''}
+                                        </span>
+                                    </div>
+                                    <p style={{ fontSize: '14px' }}>{highlightPhones(r.text)}</p>
+                                    {r.phones && r.phones.length > 0 && (
+                                        <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                            {r.phones.map((ph: string, idx: number) => (
+                                                <span key={idx} style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', padding: '2px 10px', borderRadius: '6px', fontSize: '13px', fontWeight: 600 }}>📱 {ph}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {phoneResults.length === 0 && !loading && phoneQuery && <p style={{ color: 'var(--fw-text-dim)', textAlign: 'center', padding: '24px' }}>Нічого не знайдено</p>}
                     </div>
                 </div>
             )}

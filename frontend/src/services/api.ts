@@ -71,6 +71,7 @@ export const searchApi = {
         return api.post(url, fd);
     },
     byText: (q: string, page = 1) => api.get('/search/text', { params: { q, page } }),
+    byPhone: (q: string, page = 1) => api.get('/search/phone', { params: { q, page } }),
     getFaceContext: (faceId: string) => api.get(`/search/face/${faceId}/context`),
 };
 

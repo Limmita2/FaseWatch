@@ -27,6 +27,7 @@ class Group(Base):
     telegram_id = Column(BigInteger, unique=True, nullable=True)
     name = Column(Text, nullable=False)
     bot_active = Column(Boolean, default=True)
+    is_approved = Column(Boolean, default=False, server_default='0', nullable=False)
     is_public = Column(Boolean, default=True, server_default='1', nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
@@ -75,6 +76,21 @@ class Face(Base):
     __table_args__ = (
         Index("ix_faces_message_id", "message_id"),
         Index("ix_faces_qdrant_point_id", "qdrant_point_id"),
+    )
+
+
+class MessagePhone(Base):
+    __tablename__ = "message_phones"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    message_id = Column(Uuid, ForeignKey("messages.id"), nullable=False)
+    phone = Column(String(15), nullable=False)
+
+    message = relationship("Message")
+
+    __table_args__ = (
+        Index("ix_message_phones_phone", "phone"),
+        Index("ix_message_phones_message_id", "message_id"),
     )
 
 

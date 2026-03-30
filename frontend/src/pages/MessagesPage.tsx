@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { messagesApi, groupsApi } from '@/services/api';
 
 export default function MessagesPage() {
@@ -10,6 +11,21 @@ export default function MessagesPage() {
     const [loading, setLoading] = useState(true);
     const [photoIdQuery, setPhotoIdQuery] = useState('');
     const [highlightMessageId, setHighlightMessageId] = useState<string | null>(null);
+    const navigate = useNavigate();
+
+    // Підсвічування телефонних номерів у тексті
+    const highlightPhones = (text: string | null | undefined) => {
+        if (!text) return null;
+        const phoneRegex = /(?<!\d)((?:\+?38)?(?:[\s\-(]*?)0(?:[\s\-)]*?)(?:39|50|63|66|67|68|73|91|92|93|94|95|96|97|98|99)(?:[\s\-)]*?\d){7})(?!\d)/g;
+        const parts = text.split(phoneRegex);
+        return parts.map((part, i) => {
+            if (phoneRegex.test(part)) {
+                phoneRegex.lastIndex = 0;
+                return <span key={i} style={{ color: '#22c55e', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); navigate(`/search?tab=phone&q=${encodeURIComponent(part.replace(/[^\d+]/g, ''))}`); }} title="Шукати цей номер">{part}</span>;
+            }
+            return part;
+        });
+    };
 
     useEffect(() => {
         groupsApi.list().then(r => setGroups(r.data)).catch(() => { });
@@ -98,7 +114,7 @@ export default function MessagesPage() {
                                 </span>
                                 {msg.has_photo && <span>📷</span>}
                             </div>
-                            {msg.text && <p style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--fw-text)', fontFamily: `'Courier New', Courier, monospace` }}>{msg.text}</p>}
+                            {msg.text && <p style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--fw-text)', fontFamily: `'Courier New', Courier, monospace` }}>{highlightPhones(msg.text)}</p>}
                             {msg.photo_path && (
                                 <img
                                     src={`/files/${msg.photo_path.replace(/^\/mnt\/qnap_photos\//, '')}`}

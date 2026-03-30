@@ -99,12 +99,16 @@ async def dashboard():
     """Статистика для дашборда."""
     from sqlalchemy import select, func
     from app.core.database import AsyncSessionLocal
-    from app.models.models import Group, Message, Face
+    from app.models.models import Group, Message, Face, MessagePhone
 
     async with AsyncSessionLocal() as session:
         groups_count = (await session.execute(select(func.count(Group.id)))).scalar()
         messages_count = (await session.execute(select(func.count(Message.id)))).scalar()
         faces_count = (await session.execute(select(func.count(Face.id)))).scalar()
+        phones_count = (await session.execute(select(func.count(MessagePhone.id)))).scalar()
+        unique_phones_count = (
+            await session.execute(select(func.count(func.distinct(MessagePhone.phone))))
+        ).scalar()
 
         # Последние 10 сообщений
         recent = await session.execute(
@@ -128,6 +132,8 @@ async def dashboard():
         "groups": groups_count or 0,
         "messages": messages_count or 0,
         "faces": faces_count or 0,
+        "phones": phones_count or 0,
+        "unique_phones": unique_phones_count or 0,
         "recent_messages": recent_messages,
     }
 

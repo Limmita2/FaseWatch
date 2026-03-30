@@ -5,6 +5,8 @@ interface DashboardData {
     groups: number;
     messages: number;
     faces: number;
+    phones: number;
+    unique_phones: number;
     recent_messages: Array<{
         id: string;
         group_name: string;
@@ -27,6 +29,8 @@ export default function DashboardPage() {
         { label: 'Групи', value: data.groups, icon: '👥' },
         { label: 'Повідомлень', value: data.messages, icon: '💬' },
         { label: 'Облич', value: data.faces, icon: '🧑' },
+        { label: 'Номерів', value: data.phones, icon: '📱' },
+        { label: 'Унікальних', value: data.unique_phones, icon: '#️⃣' },
     ];
 
     return (

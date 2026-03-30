@@ -1,7 +1,8 @@
 """
 Endpoint для приёма данных от бота (внутренний API).
 """
-from fastapi import APIRouter, Depends, UploadFile, File, Form
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime, timezone
@@ -10,8 +11,9 @@ import uuid
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.models.models import Group, Message
+from app.models.models import Group, Message, MessagePhone
 from app.services.storage_service import save_photo_to_qnap
+from app.services.phone_utils import extract_phones as extract_phones_util
 
 router = APIRouter()
 
@@ -37,9 +39,15 @@ async def receive_bot_message(
     group = result.scalar_one_or_none()
 
     if not group:
-        group = Group(id=uuid.uuid4(), telegram_id=tg_id, name=group_name)
+        # Новая группа по умолчанию НЕ одобрена администратором
+        group = Group(id=uuid.uuid4(), telegram_id=tg_id, name=group_name, is_approved=False)
         db.add(group)
-        await db.flush()
+        await db.commit() # Сразу коммитим, чтобы она появилась в базе
+        await db.refresh(group)
+
+    # Если группа не одобрена, возвращаем специальный статус (чтобы бот запросил одобрение)
+    if not group.is_approved:
+        return {"ok": False, "status": "pending_approval"}
 
     # Дедупликация: проверка, есть ли уже это сообщение от бота
     tg_msg_id = int(message_id) if message_id.isdigit() else None
@@ -89,9 +97,53 @@ async def receive_bot_message(
     db.add(msg)
     await db.commit()
 
+    # Извлекаем телефоны из текста и сохраняем в message_phones
+    if text:
+        phones = extract_phones_util(text)
+        if phones:
+            for phone in phones:
+                db.add(MessagePhone(id=uuid.uuid4(), message_id=msg.id, phone=phone))
+            await db.commit()
+
     # Если есть фото — отправляем в Celery для распознавания лиц
     if photo_path:
         from app.worker.tasks import process_photo
         process_photo.delay(str(msg.id), photo_path, str(group.id), ts.isoformat() if ts else "")
 
     return {"ok": True, "message_id": str(msg.id)}
+
+@router.post("/approve")
+async def approve_group(group_telegram_id: str = Form(...), db: AsyncSession = Depends(get_db)):
+    """Одобрение новой группы (разрешить парсинг сообщений)."""
+    try:
+        tg_id = int(group_telegram_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid telegram ID")
+        
+    result = await db.execute(select(Group).where(Group.telegram_id == tg_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+        
+    group.is_approved = True
+    group.bot_active = True
+    await db.commit()
+    return {"ok": True, "status": "approved"}
+
+@router.post("/reject")
+async def reject_group(group_telegram_id: str = Form(...), db: AsyncSession = Depends(get_db)):
+    """Отклонение группы (остановить попытки парсинга)."""
+    try:
+        tg_id = int(group_telegram_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid telegram ID")
+        
+    result = await db.execute(select(Group).where(Group.telegram_id == tg_id))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+        
+    group.is_approved = False
+    group.bot_active = False
+    await db.commit()
+    return {"ok": True, "status": "rejected"}
