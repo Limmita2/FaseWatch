@@ -26,6 +26,21 @@ _face_app = None
 _face_app_lock = threading.Lock()
 
 
+def _expand_face_bbox(bbox: list[float], image_width: int, image_height: int, padding_ratio: float) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = bbox
+    face_width = max(1.0, x2 - x1)
+    face_height = max(1.0, y2 - y1)
+    pad_x = face_width * padding_ratio
+    pad_y = face_height * padding_ratio
+
+    expanded_x1 = max(0, int(x1 - pad_x))
+    expanded_y1 = max(0, int(y1 - pad_y))
+    expanded_x2 = min(image_width, int(x2 + pad_x))
+    expanded_y2 = min(image_height, int(y2 + pad_y))
+
+    return expanded_x1, expanded_y1, expanded_x2, expanded_y2
+
+
 def _get_face_app():
     """Возвращает кэшированный FaceAnalysis (потокобезопасно)."""
     global _face_app
@@ -106,6 +121,7 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
         if img is None:
             logger.error("Не удалось открыть изображение: %s", photo_path)
             return {"error": "Cannot open image", "photo_path": photo_path}
+        image_height, image_width = img.shape[:2]
 
         # Детекция лиц (кэшированная модель)
         face_app = _get_face_app()
@@ -139,7 +155,12 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
 
             # Сохраняем кроп лица на QNAP
             try:
-                x1, y1, x2, y2 = [int(c) for c in bbox]
+                x1, y1, x2, y2 = _expand_face_bbox(
+                    bbox,
+                    image_width=image_width,
+                    image_height=image_height,
+                    padding_ratio=settings.FACE_CROP_PADDING,
+                )
                 crop = img[y1:y2, x1:x2]
                 if crop.size > 0:
                     crop_path = save_face_crop_to_qnap(crop, str(face.id))

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # InsightFace
     FACE_SIMILARITY_THRESHOLD: float = 0.75
+    FACE_CROP_PADDING: float = 0.3
 
     class Config:
         env_file = ".env"
