@@ -21,8 +21,8 @@ os.environ.setdefault("MKL_NUM_THREADS", str(ORT_THREADS))
 os.environ.setdefault("OPENBLAS_NUM_THREADS", str(ORT_THREADS))
 os.environ.setdefault("NUMEXPR_NUM_THREADS", str(ORT_THREADS))
 
-# ── Lazy singleton для InsightFace (один раз на воркер-процесс) ──
-_face_app = None
+# ── Lazy singleton для InsightFace (по одному инстансу на det_size) ──
+_face_apps = {}
 _face_app_lock = threading.Lock()
 
 
@@ -41,12 +41,12 @@ def _expand_face_bbox(bbox: list[float], image_width: int, image_height: int, pa
     return expanded_x1, expanded_y1, expanded_x2, expanded_y2
 
 
-def _get_face_app():
-    """Возвращает кэшированный FaceAnalysis (потокобезопасно)."""
-    global _face_app
-    if _face_app is None:
+def _get_face_app(det_size: tuple[int, int]):
+    """Возвращает кэшированный FaceAnalysis для конкретного det_size."""
+    global _face_apps
+    if det_size not in _face_apps:
         with _face_app_lock:
-            if _face_app is None:
+            if det_size not in _face_apps:
                 from insightface.app import FaceAnalysis
 
                 # Настраиваем ONNX session options для многопоточности
@@ -56,8 +56,8 @@ def _get_face_app():
                 sess_options.execution_mode = ort.ExecutionMode.ORT_PARALLEL
 
                 logger.info(
-                    "Инициализация InsightFace (ORT threads: intra=%d, inter=%d)...",
-                    ORT_THREADS, ORT_INTER_THREADS,
+                    "Инициализация InsightFace (det_size=%s, ORT threads: intra=%d, inter=%d)...",
+                    det_size, ORT_THREADS, ORT_INTER_THREADS,
                 )
                 app = FaceAnalysis(
                     name="buffalo_l",
@@ -65,7 +65,7 @@ def _get_face_app():
                     provider_options=[{}],
                 )
                 # Применяем session options ко всем моделям InsightFace
-                app.prepare(ctx_id=-1, det_size=(640, 640))
+                app.prepare(ctx_id=-1, det_size=det_size)
                 for model in app.models:
                     if hasattr(model, 'session') and model.session is not None:
                         # Пересоздаём сессию с нашими настройками потоков
@@ -77,9 +77,17 @@ def _get_face_app():
                                 providers=["CPUExecutionProvider"],
                             )
 
-                _face_app = app
-                logger.info("InsightFace модель загружена (ORT %s).", ort.__version__)
-    return _face_app
+                _face_apps[det_size] = app
+                logger.info("InsightFace модель загружена для det_size=%s (ORT %s).", det_size, ort.__version__)
+    return _face_apps[det_size]
+
+
+def _detect_faces_adaptive(img):
+    for det_size in ((320, 320), (160, 160), (640, 640)):
+        faces = _get_face_app(det_size).get(img)
+        if faces:
+            return faces, det_size
+    return [], None
 
 
 # ── Lazy DB engine (один раз на воркер-процесс) ──
@@ -124,8 +132,17 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
         image_height, image_width = img.shape[:2]
 
         # Детекция лиц (кэшированная модель)
-        face_app = _get_face_app()
-        detected_faces = face_app.get(img)
+        detected_faces, used_det_size = _detect_faces_adaptive(img)
+        if detected_faces:
+            logger.info(
+                "Найдено %d лиц для изображения %sx%s с det_size=%s",
+                len(detected_faces), image_width, image_height, used_det_size,
+            )
+        else:
+            logger.warning(
+                "Лица не найдены для изображения %sx%s, photo_path=%s",
+                image_width, image_height, photo_path,
+            )
 
         # Qdrant клиент
         qdrant_client = ensure_collection_exists()
