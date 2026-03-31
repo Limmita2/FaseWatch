@@ -14,7 +14,7 @@
 | **Векторная БД** | Qdrant (коллекция `faces`, cosine similarity, 512 dim) |
 | **Очередь задач** | Celery + Redis (concurrency=8, prefork) |
 | **Хранилище файлов** | QNAP NAS (монтируется в `/mnt/qnap_photos`) |
-| **Инфраструктура** | Docker Compose (5 контейнеров), Nginx (reverse proxy внутри frontend) |
+| **Инфраструктура** | Docker Compose (6 контейнеров), Nginx (reverse proxy внутри frontend) |
 
 ## Структура проекта
 
@@ -35,12 +35,13 @@ FaseWatch/
 │       ├── main.py             # FastAPI app, lifespan (InsightFace warm-up), CORS, роуты
 │       ├── core/
 │       │   ├── config.py       # Settings (pydantic-settings, из .env)
-│       │   ├── database.py     # AsyncEngine (pool_size=10, max_overflow=20), AsyncSessionLocal
+│       │   ├── database.py     # AsyncEngine (pool_size=30, max_overflow=50), AsyncSessionLocal
 │       │   └── security.py     # bcrypt hash/verify, JWT create/decode
 │       ├── models/
-│       │   └── models.py       # SQLAlchemy модели: Group, Message, Face, User
+│       │   └── models.py       # SQLAlchemy модели: Group, Message, Face, MessagePhone, User
 │       ├── services/
 │       │   ├── qdrant_service.py   # Qdrant CRUD (upsert, search, ensure_collection)
+│       │   ├── phone_utils.py      # Извлечение и нормализация украинских телефонов
 │       │   └── storage_service.py  # Сохранение фото/кропов на QNAP
 │       ├── worker/
 │       │   ├── celery_app.py   # Celery config (broker=Redis)
@@ -50,13 +51,15 @@ FaseWatch/
 │           └── endpoints/
 │               ├── auth.py         # POST /api/auth/login
 │               ├── messages.py     # GET /api/messages, GET /api/messages/{id}/context
-│               ├── search.py       # POST /api/search/face, GET /api/search/text
+│               ├── search.py       # POST /api/search/face, GET /api/search/text, GET /api/search/phone
 │               ├── groups.py       # GET /api/groups
 │               ├── imports.py      # POST /api/import (загрузка бэкапов)
 │               ├── users.py        # GET/POST/DELETE /api/users
 │               ├── input.py        # POST /api/input (ручной ввод фото)
 │               ├── webhook.py      # POST /webhook/telegram
 │               └── bot_receiver.py # POST /api/bot/message (от бота)
+│   ├── backfill_phones.py      # Полная пересборка message_phones по актуальному паттерну
+│   └── import_local.py         # Локальный импорт сообщений/фото в систему
 │
 ├── frontend/
 │   ├── Dockerfile              # Multi-stage: npm build → Nginx
@@ -74,9 +77,9 @@ FaseWatch/
 │       │   └── layout/         # AppLayout (sidebar + content)
 │       └── pages/
 │           ├── LoginPage.tsx       # /login — форма авторизации
-│           ├── DashboardPage.tsx   # / — статистика, последние сообщения
+│           ├── DashboardPage.tsx   # / — статистика, последние сообщения, счётчики телефонов
 │           ├── MessagesPage.tsx    # /messages — все сообщения с фильтрами
-│           ├── SearchPage.tsx      # /search — поиск по фото (лицу) и тексту
+│           ├── SearchPage.tsx      # /search — поиск по фото (лицу), тексту и номеру
 │           ├── GroupsPage.tsx      # /groups — Telegram-группы
 │           ├── ImportPage.tsx      # /import — загрузка бэкапов Telegram
 │           ├── InputPage.tsx       # /input — ручной ввод фото для обработки
@@ -90,7 +93,7 @@ FaseWatch/
 
 ## Модели базы данных (MariaDB)
 
-4 таблицы (Person и IdentificationQueue удалены):
+5 основных таблиц (Person и IdentificationQueue удалены):
 
 ```
 ┌──────────┐     ┌──────────────┐     ┌─────────┐
@@ -105,10 +108,18 @@ FaseWatch/
 │          │     │ photo_path   │     │ created_at     │
 │          │     │ timestamp    │     └─────────┘
 │          │     │ imported_from│
-│          │     │ created_at   │     ┌─────────┐
-│          │     └──────────────┘     │  User   │
-│          │                          │         │
-└──────────┘                          │ id (UUID)│
+│          │     │ created_at   │     ┌──────────────┐
+│          │     └──────────────┘     │ MessagePhone │
+│          │             └───────────<│              │
+└──────────┘                          │ id (UUID)    │
+                                      │ message_id   │
+                                      │ phone        │
+                                      └──────────────┘
+
+                                      ┌─────────┐
+                                      │  User   │
+                                      │         │
+                                      │ id (UUID)│
                                       │ username │
                                       │ password │
                                       │ role     │
@@ -124,12 +135,17 @@ FaseWatch/
 - `ix_messages_has_photo` — одиночный (has_photo)
 - `ft_messages_text` — FULLTEXT (text) — для текстового поиска
 
+### Ключевые индексы (MessagePhone)
+- `ix_message_phones_phone` — поиск по нормализованному телефону
+- `ix_message_phones_message_id` — связь телефон → сообщение
+
 ## Основные бизнес-процессы
 
 ### 1. Сбор сообщений из Telegram
 ```
 Telegram группа → Bot (aiogram, polling) → POST /api/bot/message → Backend
     → Сохраняет Message в MariaDB
+    → Извлекает телефоны из текста и сохраняет в message_phones
     → Если фото: сохраняет файл на QNAP, запускает Celery task process_photo
 ```
 
@@ -146,6 +162,7 @@ process_photo task:
 ```
 По фото: загрузка фото → InsightFace → вектор → Qdrant search → контекст ±5 сообщений
 По тексту: FULLTEXT MATCH AGAINST в MariaDB (fallback: LIKE %q%)
+По телефону: нормализация украинского номера → поиск в `message_phones` → выдача связанных сообщений
 ```
 
 ### 4. Импорт
@@ -153,16 +170,27 @@ process_photo task:
 Загрузка HTML/ZIP экспорта Telegram → парсинг → создание Message/Group → фото → Celery
 ```
 
+### 5. Локальный импорт больших архивов
+```bash
+docker compose exec backend python import_local.py /mnt/qnap_photos/backup/<archive>.zip --group "<group_name>"
+```
+
+- `import_local.py` можно использовать как и раньше для локальной дозагрузки групп из Telegram Desktop ZIP
+- задачи `process_photo` теперь отправляются в Celery только после `db.commit()`, поэтому старая гонка `Message not found` при локальном импорте закрыта
+- повторный запуск одного и того же архива безопасен по `telegram_message_id`: уже импортированные сообщения пропускаются
+- если в проект вносились изменения в `backend/import_local.py` или `backend/app/worker/tasks.py`, перед следующим импортом нужно пересобрать и перезапустить `backend` и `celery_worker`
+
 ## API маршруты
 
 | Метод | Путь | Описание |
 |-------|------|----------|
 | POST | `/api/auth/login` | Логин (username + password → JWT) |
-| GET | `/api/dashboard` | Статистика (кол-во групп, сообщений, лиц) |
+| GET | `/api/dashboard` | Статистика (группы, сообщения, лица, телефоны, уникальные телефоны) |
 | GET | `/api/messages` | Список сообщений (фильтры: группа, дата, has_photo) |
 | GET | `/api/messages/{id}/context` | Контекст сообщения |
 | POST | `/api/search/face` | Поиск по фото лица (multipart, top_k, threshold) |
 | GET | `/api/search/text` | Поиск по тексту сообщений (FULLTEXT) |
+| GET | `/api/search/phone` | Поиск по номеру телефона |
 | GET | `/api/groups` | Список Telegram-групп |
 | POST | `/api/import` | Импорт бэкапа (multipart/form-data) |
 | GET | `/api/users` | Список пользователей |
@@ -174,7 +202,7 @@ process_photo task:
 
 ## Docker Compose — сервисы
 
-5 контейнеров (БД **не в Docker** — MariaDB работает на QNAP):
+6 контейнеров (БД **не в Docker** — MariaDB работает на QNAP):
 
 | Контейнер | Порт | Образ | Зависимости |
 |-----------|------|-------|-------------|
@@ -241,8 +269,15 @@ Cron-задача (ежедневно в 2:00): `/usr/local/bin/fasewatch_backup
 - **InsightFace warm-up** при старте сервера (не при первом запросе)
 - **ONNX Runtime** с настраиваемыми потоками (SEARCH_ORT_THREADS=8, Celery: ORT=6)
 - **Контекст поиска** использует индексированные последовательные запросы по `ix_messages_group_timestamp` (без filesort)
-- **Connection pool:** pool_size=10, max_overflow=20
+- **Телефонный поиск** использует нормализованные номера и отдельные индексы в `message_phones`
+- **Connection pool:** pool_size=30, max_overflow=50
 - **Uvicorn:** 4 worker-процесса
+
+## Особенности миграций
+
+- `backend/entrypoint.sh` при старте пытается выполнить `alembic upgrade head`
+- если схема БД уже соответствует текущему `head`, но `alembic_version` отстаёт или содержит старую ревизию, entrypoint синхронизирует `alembic_version` до актуального `head`
+- это сделано для безопасного старта на существующей боевой БД, где часть изменений была внесена раньше вручную или через старые миграции
 
 ## Команды
 
@@ -264,6 +299,12 @@ docker compose ps
 
 # Пересборка одного сервиса
 docker compose build backend && docker compose up -d backend
+
+# Пересборка backend и celery после изменений в логике импорта/обработки фото
+docker compose build backend celery_worker && docker compose up -d backend celery_worker
+
+# Локальный импорт большого Telegram Desktop ZIP
+docker compose exec backend python import_local.py /mnt/qnap_photos/backup/my_export.zip --group "Название группы"
 
 # Миграции БД (внутри контейнера backend)
 docker exec -it facewatch_backend alembic revision --autogenerate -m "description"

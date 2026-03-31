@@ -97,6 +97,7 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
             
             # Открываем новую сессию БД для каждого файла, чтобы не держать огромные транзакции
             async with AsyncSessionLocal() as db:
+                queued_tasks = []
                 for msg_data in messages_data:
                     tg_msg_id = int(msg_data["message_id"]) if msg_data["message_id"] else None
                     if tg_msg_id and tg_msg_id in existing_msg_ids:
@@ -134,17 +135,20 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
                         existing_msg_ids.add(tg_msg_id)
                     stats["messages"] += 1
 
-                    # Прямая отправка в Celery очередь
+                    # Ставим задачи в очередь только после commit, иначе воркер может
+                    # успеть прочитать БД до появления Message и вернуть Message not found.
                     if photo_qnap_path:
-                        process_photo.delay(
+                        queued_tasks.append((
                             str(msg.id),
                             photo_qnap_path,
                             str(group.id),
                             msg_data["timestamp"].isoformat() if msg_data["timestamp"] else "",
-                        )
-                        stats["faces_queued"] += 1
+                        ))
                         
                 await db.commit()
+                for task_args in queued_tasks:
+                    process_photo.delay(*task_args)
+                stats["faces_queued"] += len(queued_tasks)
                 print(f"   Файл {html_file} успешно обработан!")
 
         print("\n==================================")

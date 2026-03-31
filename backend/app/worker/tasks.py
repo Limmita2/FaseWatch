@@ -6,6 +6,7 @@ import onnxruntime as ort
 
 from app.worker.celery_app import celery_app
 from app.core.config import settings
+from celery.exceptions import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -115,8 +116,10 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
 
         message = session.query(Message).filter_by(id=message_id_uuid).first()
         if not message:
-            session.close()
-            return {"error": "Message not found", "message_id": message_id}
+            raise self.retry(
+                exc=ValueError(f"Message not found yet: {message_id}"),
+                countdown=5,
+            )
 
         results = []
         for face_data in detected_faces:
@@ -164,6 +167,8 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
 
         return {"message_id": message_id, "faces_processed": len(results), "faces": results}
 
+    except Retry:
+        raise
     except Exception as e:
         logger.error("Ошибка обработки фото %s: %s", photo_path, e, exc_info=True)
         raise self.retry(exc=e, countdown=15)

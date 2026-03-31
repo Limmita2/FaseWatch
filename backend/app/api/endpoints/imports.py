@@ -152,6 +152,7 @@ async def import_backup(
 
         # Сохраняем сообщения в БД и фото на QNAP
         stats = {"messages": 0, "photos": 0, "faces_queued": 0}
+        queued_tasks = []
 
         for msg_data in messages_data:
             has_photo = bool(msg_data["photo_rel_path"])
@@ -183,18 +184,22 @@ async def import_backup(
             db.add(msg)
             stats["messages"] += 1
 
-            # Если есть фото — ставим в очередь Celery для распознавания лиц
+            # Ставим задачи в очередь только после commit, иначе воркер может
+            # забрать task раньше, чем Message станет видимым в БД.
             if photo_qnap_path:
-                from app.worker.tasks import process_photo
-                process_photo.delay(
+                queued_tasks.append((
                     str(msg.id),
                     photo_qnap_path,
                     str(group.id),
                     msg_data["timestamp"].isoformat() if msg_data["timestamp"] else "",
-                )
-                stats["faces_queued"] += 1
+                ))
 
         await db.commit()
+        if queued_tasks:
+            from app.worker.tasks import process_photo
+            for task_args in queued_tasks:
+                process_photo.delay(*task_args)
+            stats["faces_queued"] = len(queued_tasks)
 
         return {
             "group_id": str(group.id),
