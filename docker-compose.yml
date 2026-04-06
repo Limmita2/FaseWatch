@@ -16,6 +16,18 @@ services:
     restart: always
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: facewatch_ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=1
+
   backend:
     build:
       context: ./backend
@@ -41,6 +53,8 @@ services:
       qdrant:
         condition: service_started
       redis:
+        condition: service_started
+      ollama:
         condition: service_started
 
   celery_worker:
@@ -112,3 +126,4 @@ services:
 
 volumes:
   qdrant_data:
+  ollama_data:

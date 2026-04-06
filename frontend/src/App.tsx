@@ -10,6 +10,8 @@ import ImportPage from '@/pages/ImportPage';
 import UsersPage from '@/pages/UsersPage';
 import InputPage from '@/pages/InputPage';
 import TgAccountsPage from '@/pages/TgAccountsPage';
+import AiPage from '@/pages/AiPage';
+import ReportsPage from '@/pages/ReportsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { isLoggedIn } = useAuthStore();
@@ -35,6 +37,8 @@ export default function App() {
                 >
                     <Route index element={<DashboardPage />} />
                     <Route path="search" element={<SearchPage />} />
+                    <Route path="ai" element={<AiPage />} />
+                    <Route path="ai/reports" element={<ReportsPage />} />
                     {/* Admin-only routes */}
                     <Route path="messages" element={<AdminRoute><MessagesPage /></AdminRoute>} />
                     <Route path="groups" element={<AdminRoute><GroupsPage /></AdminRoute>} />

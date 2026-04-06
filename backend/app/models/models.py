@@ -154,3 +154,60 @@ class User(Base):
     last_ip = Column(String(50), nullable=True)
     allowed_ip = Column(String(50), default="*", server_default="*", nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class AiChat(Base):
+    __tablename__ = "ai_chats"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200), nullable=False)
+    context_type = Column(String(20), nullable=False, default="general")
+    context_id = Column(String(100), nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+    messages = relationship("AiMessage", back_populates="chat", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_ai_chats_user_id", "user_id"),
+        Index("ix_ai_chats_context", "context_type", "context_id"),
+    )
+
+
+class AiMessage(Base):
+    __tablename__ = "ai_messages"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    chat_id = Column(Uuid, ForeignKey("ai_chats.id"), nullable=False)
+    role = Column(String(10), nullable=False)
+    content = Column(Text, nullable=False)
+    tokens_used = Column(Integer, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    chat = relationship("AiChat", back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_ai_messages_chat_id", "chat_id"),
+        Index("ix_ai_messages_role", "role"),
+    )
+
+
+class AiReport(Base):
+    __tablename__ = "ai_reports"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
+    title = Column(String(200), nullable=False)
+    report_type = Column(String(30), nullable=False)
+    context_id = Column(String(100), nullable=True)
+    content = Column(Text, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("ix_ai_reports_user_id", "user_id"),
+        Index("ix_ai_reports_type", "report_type"),
+    )

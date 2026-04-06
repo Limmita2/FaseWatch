@@ -136,3 +136,22 @@ export const tgAccountsApi = {
         api.post(`/tg-accounts/${id}/groups`, data),
     removeGroup: (id: string, groupId: string) => api.delete(`/tg-accounts/${id}/groups/${groupId}`),
 };
+
+// ===== AI =====
+export const aiApi = {
+    status: () => api.get('/ai/status'),
+    chats: () => api.get('/ai/chats'),
+    createChat: (data: { context_type: string; context_id?: string; first_message: string }) =>
+        api.post('/ai/chats', data),
+    messages: (chatId: string) => api.get(`/ai/chats/${chatId}/messages`),
+    summary: (chatId: string) => api.get(`/ai/chats/${chatId}/summary`),
+    deleteChat: (chatId: string) => api.delete(`/ai/chats/${chatId}`),
+    quickDaily: () => api.post('/ai/quick/daily-brief'),
+    quickCase: (data: { case_id: string; days?: number }) => api.post('/ai/quick/case-summary', data),
+    quickPerson: (data: { person_id: string }) => api.post('/ai/quick/person-analysis', data),
+    reports: () => api.get('/ai/reports'),
+    report: (reportId: string) => api.get(`/ai/reports/${reportId}`),
+    saveReport: (data: { title: string; report_type: string; context_id?: string; content: string }) =>
+        api.post('/ai/reports', data),
+    deleteReport: (reportId: string) => api.delete(`/ai/reports/${reportId}`),
+};

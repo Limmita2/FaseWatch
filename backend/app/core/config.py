@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     TG_API_HASH: Optional[str] = None
     TELETHON_API_KEY: str = "change_me"
 
+    # Ollama
+    OLLAMA_URL: str = "http://facewatch_ollama:11434"
+    OLLAMA_MODEL: str = "gemma4:e4b"
+    OLLAMA_TIMEOUT: int = 120
+
     # InsightFace
     FACE_SIMILARITY_THRESHOLD: float = 0.75
     FACE_CROP_PADDING: float = 0.3
