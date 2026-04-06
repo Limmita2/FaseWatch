@@ -22,6 +22,8 @@ class MessageOut(BaseModel):
     group_name: Optional[str] = None
     sender_name: Optional[str] = None
     text: Optional[str] = None
+    document_name: Optional[str] = None
+    document_text: Optional[str] = None
     has_photo: bool
     photo_path: Optional[str] = None
     timestamp: Optional[datetime] = None
@@ -74,6 +76,8 @@ async def list_messages(
             group_name=gname,
             sender_name=msg.sender_name,
             text=msg.text,
+            document_name=msg.document_name,
+            document_text=msg.document_text,
             has_photo=msg.has_photo,
             photo_path=msg.photo_path,
             timestamp=msg.timestamp,

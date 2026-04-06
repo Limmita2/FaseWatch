@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
     # Telegram
     BOT_TOKEN: Optional[str] = None
+    TG_API_ID: Optional[str] = None
+    TG_API_HASH: Optional[str] = None
+    TELETHON_API_KEY: str = "change_me"
 
     # InsightFace
     FACE_SIMILARITY_THRESHOLD: float = 0.75

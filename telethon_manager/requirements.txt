@@ -1,0 +1,5 @@
+telethon
+httpx
+python-dotenv
+python-docx
+pdfplumber

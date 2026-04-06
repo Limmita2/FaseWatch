@@ -120,3 +120,19 @@ export const inputApi = {
         return api.post('/input/', fd);
     },
 };
+
+// ===== Telegram Accounts =====
+export const tgAccountsApi = {
+    list: () => api.get('/tg-accounts/'),
+    create: (data: { name: string; region?: string; phone: string; api_id: string; api_hash: string }) =>
+        api.post('/tg-accounts/', data),
+    sendCode: (id: string) => api.post(`/tg-accounts/${id}/auth/send-code`),
+    verifyCode: (id: string, data: { code: string; password?: string }) =>
+        api.post(`/tg-accounts/${id}/auth/verify-code`, data),
+    delete: (id: string) => api.delete(`/tg-accounts/${id}`),
+    discoverGroups: (id: string) => api.get(`/tg-accounts/${id}/discover-groups`),
+    groups: (id: string) => api.get(`/tg-accounts/${id}/groups`),
+    addGroup: (id: string, data: { telegram_group_id?: number; group_id?: string; group_name?: string }) =>
+        api.post(`/tg-accounts/${id}/groups`, data),
+    removeGroup: (id: string, groupId: string) => api.delete(`/tg-accounts/${id}/groups/${groupId}`),
+};

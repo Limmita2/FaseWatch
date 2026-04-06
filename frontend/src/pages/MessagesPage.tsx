@@ -109,12 +109,29 @@ export default function MessagesPage() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                                 <span className="badge badge-primary">{msg.group_name || '—'}</span>
                                 {msg.sender_name && <span style={{ fontSize: '13px', fontWeight: 600 }}>{msg.sender_name}</span>}
+                                {msg.document_name && <span className="badge badge-warning">{msg.document_name}</span>}
                                 <span style={{ fontSize: '12px', color: 'var(--fw-text-dim)', marginLeft: 'auto' }}>
                                     {msg.timestamp ? new Date(msg.timestamp).toLocaleString('uk-UA') : '—'}
                                 </span>
                                 {msg.has_photo && <span>📷</span>}
                             </div>
                             {msg.text && <p style={{ fontSize: '14px', lineHeight: '1.5', color: 'var(--fw-text)', fontFamily: `'Courier New', Courier, monospace` }}>{highlightPhones(msg.text)}</p>}
+                            {!msg.text && msg.document_text && (
+                                <div style={{ marginTop: '8px' }}>
+                                    <div style={{ fontSize: '12px', color: 'var(--fw-text-muted)', marginBottom: '6px' }}>Текст документа</div>
+                                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.45', color: 'var(--fw-text)', fontFamily: `'Courier New', Courier, monospace`, margin: 0, maxHeight: '260px', overflow: 'auto' }}>
+                                        {msg.document_text}
+                                    </pre>
+                                </div>
+                            )}
+                            {msg.text && msg.document_text && (
+                                <details style={{ marginTop: '8px' }}>
+                                    <summary style={{ cursor: 'pointer', color: 'var(--fw-text-muted)', fontSize: '13px' }}>Показати текст документа</summary>
+                                    <pre style={{ whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.45', color: 'var(--fw-text)', fontFamily: `'Courier New', Courier, monospace`, marginTop: '8px', maxHeight: '260px', overflow: 'auto' }}>
+                                        {msg.document_text}
+                                    </pre>
+                                </details>
+                            )}
                             {msg.photo_path && (
                                 <img
                                     src={`/files/${msg.photo_path.replace(/^\/mnt\/qnap_photos\//, '')}`}

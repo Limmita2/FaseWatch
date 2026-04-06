@@ -10,7 +10,7 @@ qdrant-client
 insightface
 onnxruntime
 celery
-redis
+redis[hiredis]
 python-multipart
 python-jose[cryptography]
 bcrypt
@@ -21,3 +21,4 @@ Pillow
 PyMuPDF
 pytest
 httpx
+telethon

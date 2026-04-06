@@ -11,6 +11,7 @@ export default function Sidebar() {
         { path: '/input', label: 'Введення', icon: '📷', adminOnly: true },
         { path: '/messages', label: 'Повідомлення', icon: '💬', adminOnly: true },
         { path: '/groups', label: 'Групи', icon: '👥', adminOnly: true },
+        { path: '/tg-accounts', label: 'Акаунти TG', icon: '📱', adminOnly: true },
         { path: '/import', label: 'Імпорт', icon: '📦', adminOnly: true },
         { path: '/users', label: 'Користувачі', icon: '⚙️', adminOnly: true },
     ];
