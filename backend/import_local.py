@@ -105,11 +105,19 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
                         continue
 
                     has_photo = bool(msg_data["photo_rel_path"])
-                    photo_qnap_path = None
-
+                    photo_hash = None
                     if has_photo and os.path.exists(photos_dir):
                         src_photo = os.path.join(export_dir, msg_data["photo_rel_path"])
                         if os.path.isfile(src_photo):
+                            import hashlib
+                            with open(src_photo, "rb") as photo_file:
+                                photo_hash = hashlib.sha256(photo_file.read()).hexdigest()
+                                
+                            dup_photo = await db.execute(select(Message).where(Message.photo_hash == photo_hash))
+                            if dup_photo.scalars().first():
+                                # Дубликат, пропускаем всё сообщение
+                                continue
+
                             ts_str = msg_data["timestamp"].strftime("%Y-%m") if msg_data["timestamp"] else "unknown"
                             dest_dir = Path(settings.QNAP_MOUNT_PATH) / "photos" / str(group.id) / ts_str
                             dest_dir.mkdir(parents=True, exist_ok=True)
@@ -127,6 +135,7 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
                         text=msg_data["text"],
                         has_photo=has_photo,
                         photo_path=photo_qnap_path,
+                        photo_hash=photo_hash,
                         timestamp=msg_data["timestamp"],
                         imported_from_backup=True,
                     )

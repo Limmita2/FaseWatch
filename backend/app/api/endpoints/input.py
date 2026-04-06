@@ -51,6 +51,22 @@ async def input_photo(
     if not contents:
         raise HTTPException(status_code=400, detail="Пустой файл")
 
+    import hashlib
+    photo_hash = hashlib.sha256(contents).hexdigest()
+
+    # Проверка на дубликат
+    dup_photo = await db.execute(select(Message).where(Message.photo_hash == photo_hash))
+    if dup_photo.scalars().first():
+        return {
+            "message_id": "",
+            "group_id": str(group.id),
+            "group_name": group.name,
+            "photo_path": "",
+            "text": text,
+            "duplicate": True,
+            "faces_queued": False,
+        }
+
     # Сохраняем на QNAP
     now = datetime.utcnow()
     ts_str = now.strftime("%Y-%m")
@@ -70,6 +86,7 @@ async def input_photo(
         text=text if text else None,
         has_photo=True,
         photo_path=str(file_path),
+        photo_hash=photo_hash,
         timestamp=now,
         imported_from_backup=False,
     )

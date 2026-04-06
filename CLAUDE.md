@@ -59,7 +59,9 @@ FaseWatch/
 │               ├── webhook.py      # POST /webhook/telegram
 │               └── bot_receiver.py # POST /api/bot/message (от бота)
 │   ├── backfill_phones.py      # Полная пересборка message_phones по актуальному паттерну
-│   └── import_local.py         # Локальный импорт сообщений/фото в систему
+│   ├── import_local.py         # Локальный импорт сообщений/фото в систему
+│   ├── delete_duplicate_photos.py # Глобальная очистка дубликатов (SQL, Qdrant, QNAP)
+│   └── delete_spam.py          # Удаление спама по заданным критериям
 │
 ├── frontend/
 │   ├── Dockerfile              # Multi-stage: npm build → Nginx
@@ -106,11 +108,11 @@ FaseWatch/
 │ is_public│     │ text         │     │ bbox (JSON)    │
 │ created  │     │ has_photo    │     │ confidence     │
 │          │     │ photo_path   │     │ created_at     │
-│          │     │ timestamp    │     └─────────┘
-│          │     │ imported_from│
-│          │     │ created_at   │     ┌──────────────┐
-│          │     └──────────────┘     │ MessagePhone │
-│          │             └───────────<│              │
+│          │     │ photo_hash   │     └─────────┘
+│          │     │ timestamp    │
+│          │     │ imported_from│     ┌──────────────┐
+│          │     │ created_at   │     │ MessagePhone │
+│          │     └──────────────┘     │              │
 └──────────┘                          │ id (UUID)    │
                                       │ message_id   │
                                       │ phone        │
@@ -133,6 +135,7 @@ FaseWatch/
 - `ix_messages_group_created` — составной (group_id, created_at)
 - `ix_messages_timestamp` — одиночный (timestamp)
 - `ix_messages_has_photo` — одиночный (has_photo)
+- `ix_messages_photo_hash` — одиночный (photo_hash) — используется для быстрого поиска дубликатов загружаемых картинок
 - `ft_messages_text` — FULLTEXT (text) — для текстового поиска
 
 ### Ключевые индексы (MessagePhone)
@@ -165,12 +168,19 @@ process_photo task:
 По телефону: нормализация украинского номера → поиск в `message_phones` → выдача связанных сообщений
 ```
 
-### 4. Импорт
+### 4. Дедупликация (Строгая)
+```
+Загрузка фото → SHA-256 хэш → Поиск по photo_hash в БД
+    → Если найден: Игнорировать всё сообщение (сохраняет диск и CPU)
+    → Если не найден: Обычный процесс сохранения
+```
+
+### 5. Импорт
 ```
 Загрузка HTML/ZIP экспорта Telegram → парсинг → создание Message/Group → фото → Celery
 ```
 
-### 5. Локальный импорт больших архивов
+### 6. Локальный импорт больших архивов
 ```bash
 docker compose exec backend python import_local.py /mnt/qnap_photos/backup/<archive>.zip --group "<group_name>"
 ```
@@ -266,6 +276,7 @@ Cron-задача (ежедневно в 2:00): `/usr/local/bin/fasewatch_backup
 
 ## Производительность (оптимизации)
 
+- **Строгая дедупликация фото:** при загрузке фото вычисляется его `SHA-256` хеш. Если картинка (даже с другим текстом) уже есть в БД (`photo_hash`), весь входящий спам-дубликат (и новый текст, и фото) моментально отбрасывается, предотвращая засорение диска QNAP и базы Qdrant, а также спасая ресурсы Celery от холостых прогонов InsightFace.
 - **InsightFace warm-up** при старте сервера (не при первом запросе)
 - **ONNX Runtime** с настраиваемыми потоками (SEARCH_ORT_THREADS=8, Celery: ORT=6)
 - **Контекст поиска** использует индексированные последовательные запросы по `ix_messages_group_timestamp` (без filesort)
@@ -305,6 +316,9 @@ docker compose build backend celery_worker && docker compose up -d backend celer
 
 # Локальный импорт большого Telegram Desktop ZIP
 docker compose exec backend python import_local.py /mnt/qnap_photos/backup/my_export.zip --group "Название группы"
+
+# Глобальная очистка дубликатов (SQL, Qdrant, QNAP)
+docker compose exec backend python delete_duplicate_photos.py
 
 # Миграции БД (внутри контейнера backend)
 docker exec -it facewatch_backend alembic revision --autogenerate -m "description"

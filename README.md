@@ -7,3 +7,5 @@
 docker compose exec backend python import_local.py /mnt/qnap_photos/backup/my_huge_chat.zip --group "Моя Огромная Группа"
 
 Важно на будущее: при изменениях кода backend всегда нужно делать 'docker compose build backend && docker compose up -d backend', а не просто restart.
+
+docker compose exec backend python import_local.py /mnt/qnap_photos/backup/1.zip --group "КОПІНФО ЛРУ"

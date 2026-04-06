@@ -74,9 +74,18 @@ async def receive_bot_message(
     # Сохраняем фото на QNAP
     photo_path = None
     has_photo = False
+    photo_hash = None
     if photo:
         photo_data = await photo.read()
         if photo_data:
+            import hashlib
+            photo_hash = hashlib.sha256(photo_data).hexdigest()
+            # Проверка на наличие дубликата картинки
+            dup_photo = await db.execute(select(Message).where(Message.photo_hash == photo_hash))
+            if dup_photo.scalars().first():
+                # Полностью игнорируем дубликат
+                return {"ok": True, "duplicate": True, "reason": "photo_duplicated"}
+
             has_photo = True
             ts_str = ts.strftime("%Y-%m-%dT%H-%M-%S") if ts else "unknown"
             photo_path = save_photo_to_qnap(photo_data, str(group.id), message_id, ts_str)
@@ -91,6 +100,7 @@ async def receive_bot_message(
         text=text or None,
         has_photo=has_photo,
         photo_path=photo_path,
+        photo_hash=photo_hash,
         timestamp=ts,
         imported_from_backup=False,
     )

@@ -48,6 +48,7 @@ class Message(Base):
     timestamp = Column(TIMESTAMP, nullable=True)
     imported_from_backup = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
+    photo_hash = Column(String(64), index=True, nullable=True) # Хэш SHA-256 оригинальной картинки
 
     group = relationship("Group", back_populates="messages")
     faces = relationship("Face", back_populates="message")
@@ -57,6 +58,7 @@ class Message(Base):
         Index("ix_messages_group_created", "group_id", "created_at"),
         Index("ix_messages_timestamp", "timestamp"),
         Index("ix_messages_has_photo", "has_photo"),
+        Index("ix_messages_photo_hash", "photo_hash"), # Явный индекс
         UniqueConstraint("group_id", "telegram_message_id", name="uq_group_telegram_msg"),
     )
 
