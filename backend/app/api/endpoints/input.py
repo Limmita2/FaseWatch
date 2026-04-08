@@ -89,6 +89,7 @@ async def input_photo(
         photo_hash=photo_hash,
         timestamp=now,
         imported_from_backup=False,
+        photo_processed_at=None,
     )
     db.add(msg)
     await db.commit()

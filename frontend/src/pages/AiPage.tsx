@@ -49,6 +49,7 @@ export default function AiPage() {
     });
     const [quickInput, setQuickInput] = useState('');
     const [draftAssistant, setDraftAssistant] = useState('');
+    const [generating, setGenerating] = useState(false);
     const abortRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -225,10 +226,14 @@ export default function AiPage() {
     };
 
     const handleQuickDaily = async () => {
+        console.log('[AI] handleQuickDaily clicked');
         setError('');
         setSuccess('');
+        setGenerating(true);
         try {
+            console.log('[AI] Calling aiApi.quickDaily()...');
             const res = await aiApi.quickDaily();
+            console.log('[AI] Response received:', res.data);
             setSelectedChat(null);
             setMessages([]);
             setSummary({ context_type: 'daily' });
@@ -239,7 +244,11 @@ export default function AiPage() {
             });
             setSuccess('Денний брифінг згенеровано і збережено.');
         } catch (err: any) {
-            setError(err.response?.data?.detail || 'Не вдалося згенерувати денний брифінг');
+            console.error('[AI] Error:', err);
+            const detail = err.response?.data?.detail || err.message || 'Не вдалося згенерувати денний брифінг';
+            setError(detail);
+        } finally {
+            setGenerating(false);
         }
     };
 
@@ -329,7 +338,9 @@ export default function AiPage() {
                 <div>
                     <div style={{ fontSize: '18px', fontWeight: 800, marginBottom: '12px' }}>Швидкі дії</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <button className="btn-primary" onClick={handleQuickDaily}>📊 Денний брифінг</button>
+                        <button className="btn-primary" onClick={handleQuickDaily} disabled={generating}>
+                            {generating ? '⏳ Генерація...' : '📊 Денний брифінг'}
+                        </button>
                         <button className="btn-secondary" onClick={() => setShowQuickModal('case')}>📁 Аналіз справи</button>
                         <button className="btn-secondary" onClick={() => setShowQuickModal('person')}>👤 Аналіз особи</button>
                     </div>
@@ -387,7 +398,9 @@ export default function AiPage() {
                         <h1 style={{ margin: 0 }}>Оберіть чат або створіть новий</h1>
                         <div style={{ color: 'var(--fw-text-muted)' }}>Швидкий доступ до локального ШІ FaceWatch через Ollama.</div>
                         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                            <button className="btn-primary" onClick={handleQuickDaily}>📊 Денний брифінг</button>
+                            <button className="btn-primary" onClick={handleQuickDaily} disabled={generating}>
+                                {generating ? '⏳ Генерація...' : '📊 Денний брифінг'}
+                            </button>
                             <button className="btn-secondary" onClick={() => setShowNewChat(true)}>+ Новий чат</button>
                         </div>
                     </div>

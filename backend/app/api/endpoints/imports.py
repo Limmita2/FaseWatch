@@ -180,6 +180,7 @@ async def import_backup(
                 photo_path=photo_qnap_path,
                 timestamp=msg_data["timestamp"],
                 imported_from_backup=True,
+                photo_processed_at=None,
             )
             db.add(msg)
             stats["messages"] += 1

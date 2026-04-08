@@ -12,6 +12,8 @@ import InputPage from '@/pages/InputPage';
 import TgAccountsPage from '@/pages/TgAccountsPage';
 import AiPage from '@/pages/AiPage';
 import ReportsPage from '@/pages/ReportsPage';
+import WaAccountsPage from '@/pages/WaAccountsPage';
+import SignalPage from '@/pages/SignalPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const { isLoggedIn } = useAuthStore();
@@ -37,12 +39,14 @@ export default function App() {
                 >
                     <Route index element={<DashboardPage />} />
                     <Route path="search" element={<SearchPage />} />
-                    <Route path="ai" element={<AiPage />} />
-                    <Route path="ai/reports" element={<ReportsPage />} />
+                    <Route path="ai" element={<AdminRoute><AiPage /></AdminRoute>} />
+                    <Route path="ai/reports" element={<AdminRoute><ReportsPage /></AdminRoute>} />
                     {/* Admin-only routes */}
                     <Route path="messages" element={<AdminRoute><MessagesPage /></AdminRoute>} />
                     <Route path="groups" element={<AdminRoute><GroupsPage /></AdminRoute>} />
                     <Route path="tg-accounts" element={<AdminRoute><TgAccountsPage /></AdminRoute>} />
+                    <Route path="wa-accounts" element={<AdminRoute><WaAccountsPage /></AdminRoute>} />
+                    <Route path="signal" element={<AdminRoute><SignalPage /></AdminRoute>} />
                     <Route path="import" element={<AdminRoute><ImportPage /></AdminRoute>} />
                     <Route path="users" element={<AdminRoute><UsersPage /></AdminRoute>} />
                     <Route path="input" element={<AdminRoute><InputPage /></AdminRoute>} />

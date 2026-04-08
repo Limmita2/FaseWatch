@@ -486,6 +486,8 @@ async def add_account_group(
             group = Group(
                 id=uuid.uuid4(),
                 telegram_id=telegram_group_id,
+                source_platform="telegram",
+                external_id=str(telegram_group_id),
                 name=(body.group_name or f"Group {telegram_group_id}"),
                 is_approved=True,
             )
@@ -494,6 +496,10 @@ async def add_account_group(
             await db.refresh(group)
         elif body.group_name and group.name != body.group_name:
             group.name = body.group_name
+            await db.commit()
+        elif group.external_id != str(telegram_group_id) or group.source_platform != "telegram":
+            group.external_id = str(telegram_group_id)
+            group.source_platform = "telegram"
             await db.commit()
 
     if not group:

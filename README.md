@@ -9,3 +9,15 @@ docker compose exec backend python import_local.py /mnt/qnap_photos/backup/my_hu
 Важно на будущее: при изменениях кода backend всегда нужно делать 'docker compose build backend && docker compose up -d backend', а не просто restart.
 
 docker compose exec backend python import_local.py /mnt/qnap_photos/backup/1.zip --group "КОПІНФО ЛРУ"
+
+## WhatsApp подключение
+
+1. Соберите и поднимите сервис: `docker compose build facewatch_whatsapp && docker compose up -d facewatch_whatsapp`
+2. Посмотрите QR-код в логах: `docker logs -f facewatch_whatsapp`
+3. Отсканируйте QR в WhatsApp: `Настройки -> Связанные устройства -> Привязка устройства`
+4. После успешной авторизации сессия сохранится в `./whatsapp-session`, повторное сканирование после обычного рестарта не потребуется
+
+Важно:
+- backend должен быть доступен по `WHATSAPP_BACKEND_URL`
+- при потере сессии контейнер завершится и после рестарта покажет новый QR
+- сервис читает только групповые входящие сообщения и не отправляет read/delivery confirmations

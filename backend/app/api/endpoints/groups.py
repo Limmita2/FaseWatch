@@ -17,6 +17,8 @@ router = APIRouter()
 class GroupOut(BaseModel):
     id: str
     telegram_id: Optional[int] = None
+    source_platform: str = "telegram"
+    external_id: Optional[str] = None
     name: str
     bot_active: bool
     is_public: bool = True
@@ -50,6 +52,8 @@ async def list_groups(
         out.append(GroupOut(
             id=str(g.id),
             telegram_id=g.telegram_id,
+            source_platform=g.source_platform or "telegram",
+            external_id=g.external_id,
             name=g.name,
             bot_active=g.bot_active,
             is_public=g.is_public,

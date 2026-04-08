@@ -12,7 +12,7 @@ from app.core.security import hash_password
 from app.models.models import User, UserRole
 from app.services.qdrant_service import ensure_collection_exists
 
-from app.api.endpoints import auth, messages, search, groups, imports, webhook, bot_receiver, users, input, tg_accounts, ai
+from app.api.endpoints import auth, messages, search, groups, imports, webhook, bot_receiver, users, input, tg_accounts, ai, platforms
 
 
 @asynccontextmanager
@@ -94,6 +94,7 @@ app.include_router(users.router, prefix="/api/users", tags=["Пользоват�
 app.include_router(input.router, prefix="/api/input", tags=["Ввод"])
 app.include_router(tg_accounts.router, prefix="/api/tg-accounts", tags=["Telegram Акаунти"])
 app.include_router(ai.router, prefix="/api/ai", tags=["AI"])
+app.include_router(platforms.router, prefix="/api/platforms", tags=["Platform Sources"])
 
 
 @app.get("/api/dashboard")

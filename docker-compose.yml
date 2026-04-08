@@ -8,25 +8,28 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     environment:
-      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=20000
+      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=50000
+      - QDRANT__STORAGE__PERFORMANCE__OPTIMIZER_CPU_BUDGET=8
+      - QDRANT__SERVICE__MAX_WORKERS=16
 
   redis:
     image: redis:alpine
     container_name: facewatch_redis
     restart: always
-    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru --save 60 1000 --appendonly yes
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: facewatch_ollama
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    environment:
-      - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=1
+  # Ollama (отключён, оставлен в запас)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: facewatch_ollama
+  #   restart: unless-stopped
+  #   ports:
+  #     - "127.0.0.1:11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   environment:
+  #     - OLLAMA_NUM_PARALLEL=2
+  #     - OLLAMA_MAX_LOADED_MODELS=1
 
   backend:
     build:
@@ -54,8 +57,6 @@ services:
         condition: service_started
       redis:
         condition: service_started
-      ollama:
-        condition: service_started
 
   celery_worker:
     build:
@@ -63,7 +64,7 @@ services:
       dockerfile: Dockerfile
     container_name: facewatch_celery
     restart: always
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=8 --pool=prefork
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=16 --pool=prefork --max-tasks-per-child=100 --prefetch-multiplier=4
     env_file: .env
     environment:
       - DATABASE_URL=mysql+aiomysql://${MARIADB_USER}:${MARIADB_PASSWORD}@${MARIADB_HOST}:${MARIADB_PORT}/${MARIADB_DB}
@@ -73,16 +74,22 @@ services:
       - QNAP_MOUNT_PATH=/mnt/qnap_photos
       - TZ=Europe/Kyiv
       - PYTHONUNBUFFERED=1
-      - ORT_INTRA_THREADS=6
-      - ORT_INTER_THREADS=2
-      - OMP_NUM_THREADS=6
-      - MKL_NUM_THREADS=6
-      - OPENBLAS_NUM_THREADS=6
+      - ORT_INTRA_THREADS=3
+      - ORT_INTER_THREADS=1
+      - OMP_NUM_THREADS=3
+      - MKL_NUM_THREADS=3
+      - OPENBLAS_NUM_THREADS=3
     volumes:
       - /mnt/qnap_photos:/mnt/qnap_photos
     depends_on:
       - backend
       - redis
+    healthcheck:
+      test: ["CMD", "celery", "-A", "app.worker.celery_app", "inspect", "ping"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 60s
 
   bot:
     build:
@@ -97,6 +104,33 @@ services:
       - PYTHONUNBUFFERED=1
     depends_on:
       - backend
+
+  facewatch_signal:
+    image: bbernhard/signal-cli-rest-api:latest
+    container_name: facewatch_signal
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - MODE=native
+      - TZ=Europe/Kyiv
+    volumes:
+      - ./signal-data:/home/.local/share/signal-cli
+
+  signal_bot:
+    build:
+      context: ./signal_bot
+      dockerfile: Dockerfile
+    container_name: facewatch_signal_bot
+    restart: always
+    env_file: .env
+    environment:
+      - SIGNAL_API_URL=http://facewatch_signal:8080
+      - BACKEND_API_URL=http://backend:8000
+      - TZ=Europe/Kyiv
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - backend
+      - facewatch_signal
 
   frontend:
     build:
@@ -121,6 +155,22 @@ services:
       - BACKEND_URL=http://backend:8000
       - TZ=Europe/Kyiv
       - PYTHONUNBUFFERED=1
+    depends_on:
+      - backend
+
+  facewatch_whatsapp:
+    build:
+      context: ./whatsapp_bot
+      dockerfile: Dockerfile
+    container_name: facewatch_whatsapp
+    restart: always
+    env_file: .env
+    environment:
+      - WHATSAPP_BACKEND_URL=http://facewatch_backend:8000
+      - TZ=Europe/Kyiv
+      - NODE_ENV=production
+    volumes:
+      - ./whatsapp-session:/app/session
     depends_on:
       - backend
 

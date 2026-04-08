@@ -138,6 +138,7 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
                         photo_hash=photo_hash,
                         timestamp=msg_data["timestamp"],
                         imported_from_backup=True,
+                        photo_processed_at=None,
                     )
                     db.add(msg)
                     if tg_msg_id:

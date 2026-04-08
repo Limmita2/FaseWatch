@@ -29,8 +29,8 @@ class Settings(BaseSettings):
 
     # Ollama
     OLLAMA_URL: str = "http://facewatch_ollama:11434"
-    OLLAMA_MODEL: str = "gemma4:e4b"
-    OLLAMA_TIMEOUT: int = 120
+    OLLAMA_MODEL: str = "llama3.2:3b"
+    OLLAMA_TIMEOUT: int = 180
 
     # InsightFace
     FACE_SIMILARITY_THRESHOLD: float = 0.75

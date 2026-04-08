@@ -38,7 +38,7 @@ SYSTEM_PROMPT_GENERAL = SYSTEM_PROMPT_BASE + """
 Контекст: загальний аналітичний діалог по доступних даних FaceWatch.
 """
 
-AI_NUM_CTX = 32768
+AI_NUM_CTX = 4096
 
 
 class OllamaService:
@@ -108,7 +108,7 @@ class OllamaService:
             "stream": False,
             "options": {"num_ctx": AI_NUM_CTX},
         }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=300) as client:
             response = await client.post(f"{self.base_url}/api/generate", json=payload)
             response.raise_for_status()
             return response.json().get("response", "")

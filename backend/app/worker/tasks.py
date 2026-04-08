@@ -1,7 +1,9 @@
+import gc
 import uuid
 import os
 import logging
 import threading
+from datetime import datetime
 import onnxruntime as ort
 
 from app.worker.celery_app import celery_app
@@ -11,9 +13,9 @@ from celery.exceptions import Retry
 logger = logging.getLogger(__name__)
 
 # ── Конфигурация потоков ONNX Runtime ──
-# 48 ядер / 8 Celery workers = 6 потоков на воркер
-ORT_THREADS = int(os.getenv("ORT_INTRA_THREADS", "6"))
-ORT_INTER_THREADS = int(os.getenv("ORT_INTER_THREADS", "2"))
+# 48 ядер / 16 Celery workers = 3 потока на воркер (высокая конкурентность)
+ORT_THREADS = int(os.getenv("ORT_INTRA_THREADS", "3"))
+ORT_INTER_THREADS = int(os.getenv("ORT_INTER_THREADS", "1"))
 
 # Ограничиваем потоки на уровне numpy/OpenBLAS/MKL
 os.environ.setdefault("OMP_NUM_THREADS", str(ORT_THREADS))
@@ -154,6 +156,26 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
                 countdown=5,
             )
 
+        if message.photo_processed_at is not None:
+            logger.info("Пропуск повторной обработки фото для message_id=%s: уже отмечено как обработанное", message_id)
+            return {"message_id": message_id, "skipped": True, "reason": "already_processed"}
+
+        existing_faces_count = session.query(Face).filter_by(message_id=message.id).count()
+        if existing_faces_count > 0:
+            message.photo_processed_at = datetime.utcnow()
+            session.commit()
+            logger.info(
+                "Пропуск повторной обработки фото для message_id=%s: лица уже существуют (%d)",
+                message_id,
+                existing_faces_count,
+            )
+            return {
+                "message_id": message_id,
+                "skipped": True,
+                "reason": "faces_already_exist",
+                "faces_processed": existing_faces_count,
+            }
+
         results = []
         for face_data in detected_faces:
             vector = face_data.embedding.tolist()
@@ -200,8 +222,13 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
             face.qdrant_point_id = uuid.UUID(point_id)
             results.append({"face_id": str(face.id), "score": confidence})
 
+        message.photo_processed_at = datetime.utcnow()
         session.commit()
         logger.info("Обработано %d лиц для message_id=%s", len(results), message_id)
+
+        # Освобождаем память изображения и запускаем GC
+        del img
+        gc.collect()
 
         return {"message_id": message_id, "faces_processed": len(results), "faces": results}
 
@@ -209,6 +236,10 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
         raise
     except Exception as e:
         logger.error("Ошибка обработки фото %s: %s", photo_path, e, exc_info=True)
+        # Освобождаем память при ошибке
+        if 'img' in locals():
+            del img
+            gc.collect()
         raise self.retry(exc=e, countdown=15)
     finally:
         if session:

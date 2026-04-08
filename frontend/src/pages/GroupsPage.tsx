@@ -33,14 +33,15 @@ export default function GroupsPage() {
     return (
         <div className="animate-fade-in">
             <h1 style={{ fontSize: '24px', fontWeight: 800, marginBottom: '24px', color: 'var(--fw-primary)', textTransform: 'uppercase', letterSpacing: '2px', textShadow: 'var(--fw-glow-primary)' }}>
-                [ ДЖЕРЕЛА TELEGRAM ]
+                [ ДЖЕРЕЛА ПОВІДОМЛЕНЬ ]
             </h1>
             <div className="glass-card table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>НАЗВА КАНАЛУ</th>
-                            <th>TG_ID</th>
+                            <th>НАЗВА ГРУПИ</th>
+                            <th>ПЛАТФОРМА</th>
+                            <th>ID ДЖЕРЕЛА</th>
                             <th>СТАТУС БОТА</th>
                             <th>ОСТАННІЙ ПІНГ</th>
                             {role === 'admin' && <th>В ПОШУКУ</th>}
@@ -50,7 +51,8 @@ export default function GroupsPage() {
                         {groups.map((g: any) => (
                             <tr key={g.id}>
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
-                                <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)' }}>{g.telegram_id || '—'}</td>
+                                <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)', textTransform: 'uppercase' }}>{g.source_platform || 'telegram'}</td>
+                                <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)' }}>{g.external_id || g.telegram_id || '—'}</td>
                                 <td>
                                     <span className={`badge ${g.bot_active ? 'badge-success' : 'badge-danger'}`}>
                                         {g.bot_active ? '[ АКТИВНО ]' : '[ ОФЛАЙН ]'}

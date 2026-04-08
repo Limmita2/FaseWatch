@@ -16,3 +16,5 @@ qdrant_data/
 *.tsbuildinfo
 processed_ids.txt
 processed_bezvesti_ids.txt
+signal-data/
+whatsapp-session/

@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker ps *)",
+      "Bash(docker logs *)",
+      "Bash(curl *)",
+      "Bash(python3 *)",
+      "Bash(docker exec *)",
+      "Bash(free *)",
+      "Bash(docker stats *)",
+      "Bash(docker stop *)",
+      "Bash(sleep *)",
+      "Bash(docker start *)",
+      "Bash(docker compose exec *)",
+      "Bash(docker compose logs *)"
+    ]
+  },
+  "$version": 3
+}

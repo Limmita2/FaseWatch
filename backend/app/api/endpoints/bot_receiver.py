@@ -6,9 +6,10 @@ import hashlib
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from typing import Any
 
 import pymysql
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +23,8 @@ router = APIRouter()
 
 LOCAL_TZ = ZoneInfo("Europe/Kyiv")
 MYSQL_DEADLOCK_CODES = {1205, 1213}
-MESSAGE_UNIQUE_CONSTRAINT = "uq_group_telegram_msg"
+MESSAGE_UNIQUE_CONSTRAINTS = {"uq_group_telegram_msg", "uq_group_external_msg"}
+SUPPORTED_SOURCE_PLATFORMS = {"telegram", "signal", "whatsapp"}
 
 
 def _is_mysql_deadlock(error: Exception) -> bool:
@@ -40,8 +42,107 @@ def _is_duplicate_message_error(error: Exception) -> bool:
     original = getattr(error, "orig", None)
     if isinstance(original, pymysql.IntegrityError):
         if original.args and original.args[0] == 1062:
-            return MESSAGE_UNIQUE_CONSTRAINT in str(original)
+            return any(name in str(original) for name in MESSAGE_UNIQUE_CONSTRAINTS)
     return False
+
+
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode()
+    return str(value)
+
+
+def _normalize_platform(value: Any) -> str:
+    platform = _as_text(value).strip().lower() or "telegram"
+    if platform not in SUPPORTED_SOURCE_PLATFORMS:
+        raise HTTPException(status_code=400, detail=f"Unsupported source_platform: {platform}")
+    return platform
+
+
+async def _parse_request_payload(request: Request) -> tuple[dict[str, str], UploadFile | None]:
+    content_type = request.headers.get("content-type", "").lower()
+    if "application/json" in content_type:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="JSON body must be an object")
+        return {key: _as_text(value) for key, value in payload.items()}, None
+
+    form = await request.form()
+    payload: dict[str, str] = {}
+    photo: UploadFile | None = None
+    for key, value in form.multi_items():
+        is_upload = isinstance(value, UploadFile) or (
+            hasattr(value, "filename") and callable(getattr(value, "read", None))
+        )
+        if is_upload:
+            if key == "photo":
+                photo = value
+            continue
+        payload[key] = _as_text(value)
+    return payload, photo
+
+
+async def _resolve_group(
+    db: AsyncSession,
+    source_platform: str,
+    group_external_id: str,
+    group_name: str,
+) -> Group:
+    group = None
+    telegram_id = None
+    if source_platform == "telegram":
+        try:
+            telegram_id = int(group_external_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Telegram group ID")
+
+        result = await db.execute(select(Group).where(Group.telegram_id == telegram_id))
+        group = result.scalar_one_or_none()
+
+    if group is None:
+        result = await db.execute(
+            select(Group).where(
+                Group.source_platform == source_platform,
+                Group.external_id == group_external_id,
+            )
+        )
+        group = result.scalar_one_or_none()
+
+    if group is None:
+        group = Group(
+            id=uuid.uuid4(),
+            telegram_id=telegram_id,
+            source_platform=source_platform,
+            external_id=group_external_id,
+            name=group_name or group_external_id,
+            is_approved=source_platform != "telegram",
+        )
+        db.add(group)
+        await db.commit()
+        await db.refresh(group)
+        return group
+
+    changed = False
+    if group.source_platform != source_platform:
+        group.source_platform = source_platform
+        changed = True
+    if group.external_id != group_external_id:
+        group.external_id = group_external_id
+        changed = True
+    if source_platform == "telegram" and telegram_id is not None and group.telegram_id != telegram_id:
+        group.telegram_id = telegram_id
+        changed = True
+    if group_name and group.name != group_name:
+        group.name = group_name
+        changed = True
+
+    if changed:
+        await db.commit()
+        await db.refresh(group)
+
+    return group
 
 
 async def _commit_message_with_retry(db: AsyncSession, msg: Message) -> bool:
@@ -65,43 +166,53 @@ async def _commit_message_with_retry(db: AsyncSession, msg: Message) -> bool:
 
 @router.post("/message")
 async def receive_bot_message(
-    group_telegram_id: str = Form(...),
-    group_name: str = Form(""),
-    message_id: str = Form(...),
-    sender_telegram_id: str = Form(""),
-    sender_name: str = Form(""),
-    text: str = Form(""),
-    timestamp: str = Form(""),
-    photo: UploadFile = File(None),
-    source_account_id: str = Form(""),
-    source_type: str = Form("bot"),
-    document_text: str = Form(""),
-    document_name: str = Form(""),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Принимает сообщение от бота/telethon и сохраняет в БД."""
-    tg_id = int(group_telegram_id) if group_telegram_id else None
-    result = await db.execute(select(Group).where(Group.telegram_id == tg_id))
-    group = result.scalar_one_or_none()
+    payload, photo = await _parse_request_payload(request)
 
-    if not group:
-        group = Group(id=uuid.uuid4(), telegram_id=tg_id, name=group_name, is_approved=False)
-        db.add(group)
-        await db.commit()
-        await db.refresh(group)
-    elif group_name and group.name != group_name:
-        group.name = group_name
-        await db.commit()
+    source_platform = _normalize_platform(payload.get("source_platform"))
+    group_external_id = _as_text(payload.get("group_external_id") or payload.get("group_telegram_id")).strip()
+    if not group_external_id:
+        raise HTTPException(status_code=400, detail="group_external_id is required")
+
+    group_name = _as_text(payload.get("group_name")).strip()
+    message_id = _as_text(payload.get("message_id")).strip()
+    if not message_id:
+        raise HTTPException(status_code=400, detail="message_id is required")
+
+    sender_telegram_id = _as_text(payload.get("sender_telegram_id")).strip()
+    sender_external_id = _as_text(payload.get("sender_external_id") or sender_telegram_id).strip()
+    sender_name = _as_text(payload.get("sender_name")).strip()
+    text = _as_text(payload.get("text"))
+    timestamp = _as_text(payload.get("timestamp")).strip()
+    source_account_id = _as_text(payload.get("source_account_id")).strip()
+    source_type = _as_text(payload.get("source_type")).strip() or "bot"
+    document_text = _as_text(payload.get("document_text"))
+    document_name = _as_text(payload.get("document_name")).strip()
+
+    group = await _resolve_group(db, source_platform, group_external_id, group_name)
 
     if not group.is_approved:
         return {"ok": False, "status": "pending_approval"}
 
-    tg_msg_id = int(message_id) if message_id.isdigit() else None
+    tg_msg_id = int(message_id) if source_platform == "telegram" and message_id.isdigit() else None
+    external_message_id = message_id
     if tg_msg_id is not None:
         dup = await db.execute(
             select(Message).where(
                 Message.group_id == group.id,
                 Message.telegram_message_id == tg_msg_id
+            )
+        )
+        if dup.scalar_one_or_none():
+            return {"ok": True, "duplicate": True}
+    if external_message_id:
+        dup = await db.execute(
+            select(Message).where(
+                Message.group_id == group.id,
+                Message.external_message_id == external_message_id,
             )
         )
         if dup.scalar_one_or_none():
@@ -142,7 +253,9 @@ async def receive_bot_message(
         id=uuid.uuid4(),
         group_id=group.id,
         telegram_message_id=tg_msg_id,
+        external_message_id=external_message_id or None,
         sender_telegram_id=int(sender_telegram_id) if sender_telegram_id.isdigit() else None,
+        sender_external_id=sender_external_id or None,
         sender_name=sender_name or None,
         text=text or None,
         has_photo=has_photo,
@@ -150,6 +263,8 @@ async def receive_bot_message(
         photo_hash=photo_hash,
         timestamp=ts,
         imported_from_backup=False,
+        photo_processed_at=None,
+        source_platform=source_platform,
         source_account_id=src_account_uuid,
         source_type=source_type or "bot",
         document_text=document_text[:50000] if document_text else None,

@@ -60,11 +60,47 @@ class TelegramAccountGroup(Base):
     )
 
 
+class PlatformState(Base):
+    __tablename__ = "platform_states"
+
+    platform = Column(String(20), primary_key=True)
+    account_identifier = Column(String(191), nullable=True)
+    status = Column(String(20), nullable=False, default="inactive", server_default="inactive")
+    last_error = Column(Text, nullable=True)
+    meta = Column(JSON, nullable=True)
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+
+class PlatformGroupLink(Base):
+    __tablename__ = "platform_group_links"
+
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    platform = Column(String(20), nullable=False)
+    group_id = Column(Uuid, ForeignKey("groups.id"), nullable=False)
+    history_loaded = Column(Boolean, default=False)
+    history_load_progress = Column(Integer, default=0)
+    last_cursor = Column(String(191), nullable=True)
+    is_active = Column(Boolean, default=True)
+    meta = Column("metadata", JSON, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
+    group = relationship("Group")
+
+    __table_args__ = (
+        Index("ix_platform_group_links_platform", "platform"),
+        Index("ix_platform_group_links_group", "group_id"),
+        UniqueConstraint("platform", "group_id", name="uq_platform_group_link"),
+    )
+
+
 class Group(Base):
     __tablename__ = "groups"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     telegram_id = Column(BigInteger, unique=True, nullable=True)
+    source_platform = Column(String(20), nullable=False, default="telegram", server_default="telegram")
+    external_id = Column(String(191), nullable=True)
     name = Column(Text, nullable=False)
     bot_active = Column(Boolean, default=True)
     is_approved = Column(Boolean, default=False, server_default='0', nullable=False)
@@ -72,6 +108,11 @@ class Group(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     messages = relationship("Message", back_populates="group")
+
+    __table_args__ = (
+        Index("ix_groups_source_platform_external_id", "source_platform", "external_id"),
+        UniqueConstraint("source_platform", "external_id", name="uq_groups_platform_external"),
+    )
 
 
 class Message(Base):
@@ -81,6 +122,8 @@ class Message(Base):
     group_id = Column(Uuid, ForeignKey("groups.id"), nullable=False)
     telegram_message_id = Column(BigInteger, nullable=True)
     sender_telegram_id = Column(BigInteger, nullable=True)
+    external_message_id = Column(String(191), nullable=True)
+    sender_external_id = Column(String(191), nullable=True)
     sender_name = Column(Text, nullable=True)
     text = Column(Text, nullable=True)
     has_photo = Column(Boolean, default=False)
@@ -89,7 +132,9 @@ class Message(Base):
     imported_from_backup = Column(Boolean, default=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
     photo_hash = Column(String(64), index=True, nullable=True)
+    photo_processed_at = Column(TIMESTAMP, nullable=True)
     # Telethon account support
+    source_platform = Column(String(20), nullable=False, default="telegram", server_default="telegram")
     source_account_id = Column(Uuid, ForeignKey("telegram_accounts.id"), nullable=True)
     source_type = Column(String(10), default="bot")  # bot | account | import
     document_text = Column(Text, nullable=True)  # витягнутий текст з PDF/DOCX
@@ -105,8 +150,12 @@ class Message(Base):
         Index("ix_messages_timestamp", "timestamp"),
         Index("ix_messages_has_photo", "has_photo"),
         Index("ix_messages_photo_hash", "photo_hash"),
+        Index("ix_messages_photo_processed_at", "photo_processed_at"),
+        Index("ix_messages_source_platform", "source_platform"),
         Index("ix_messages_source_account", "source_account_id"),
+        Index("ix_messages_group_external_message", "group_id", "external_message_id"),
         UniqueConstraint("group_id", "telegram_message_id", name="uq_group_telegram_msg"),
+        UniqueConstraint("group_id", "external_message_id", name="uq_group_external_msg"),
     )
 
 class Face(Base):

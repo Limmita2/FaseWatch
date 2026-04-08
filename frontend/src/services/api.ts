@@ -137,6 +137,13 @@ export const tgAccountsApi = {
     removeGroup: (id: string, groupId: string) => api.delete(`/tg-accounts/${id}/groups/${groupId}`),
 };
 
+export const platformSourcesApi = {
+    status: (platform: 'signal' | 'whatsapp') => api.get(`/platforms/${platform}/status`),
+    groups: (platform: 'signal' | 'whatsapp') => api.get(`/platforms/${platform}/groups`),
+    toggleGroup: (platform: 'signal' | 'whatsapp', groupId: string) =>
+        api.patch(`/platforms/${platform}/groups/${groupId}/toggle`),
+};
+
 // ===== AI =====
 export const aiApi = {
     status: () => api.get('/ai/status'),
@@ -146,9 +153,9 @@ export const aiApi = {
     messages: (chatId: string) => api.get(`/ai/chats/${chatId}/messages`),
     summary: (chatId: string) => api.get(`/ai/chats/${chatId}/summary`),
     deleteChat: (chatId: string) => api.delete(`/ai/chats/${chatId}`),
-    quickDaily: () => api.post('/ai/quick/daily-brief'),
-    quickCase: (data: { case_id: string; days?: number }) => api.post('/ai/quick/case-summary', data),
-    quickPerson: (data: { person_id: string }) => api.post('/ai/quick/person-analysis', data),
+    quickDaily: () => api.post('/ai/quick/daily-brief', undefined, { timeout: 300_000 }),
+    quickCase: (data: { case_id: string; days?: number }) => api.post('/ai/quick/case-summary', data, { timeout: 300_000 }),
+    quickPerson: (data: { person_id: string }) => api.post('/ai/quick/person-analysis', data, { timeout: 300_000 }),
     reports: () => api.get('/ai/reports'),
     report: (reportId: string) => api.get(`/ai/reports/${reportId}`),
     saveReport: (data: { title: string; report_type: string; context_id?: string; content: string }) =>

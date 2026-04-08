@@ -63,8 +63,19 @@ engine = create_engine(sync_url)
 with engine.begin() as conn:
     checks = [
         conn.execute(text("SHOW COLUMNS FROM groups LIKE 'is_public'")).first() is not None,
+        conn.execute(text("SHOW COLUMNS FROM groups LIKE 'source_platform'")).first() is not None,
+        conn.execute(text("SHOW COLUMNS FROM groups LIKE 'external_id'")).first() is not None,
         conn.execute(text("SHOW COLUMNS FROM users LIKE 'last_ip'")).first() is not None,
         conn.execute(text("SHOW COLUMNS FROM users LIKE 'allowed_ip'")).first() is not None,
+        conn.execute(text("SHOW COLUMNS FROM messages LIKE 'source_platform'")).first() is not None,
+        conn.execute(text("SHOW COLUMNS FROM messages LIKE 'external_message_id'")).first() is not None,
+        conn.execute(text("SHOW COLUMNS FROM messages LIKE 'sender_external_id'")).first() is not None,
+        conn.execute(
+            text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_states'")
+        ).scalar() == 1,
+        conn.execute(
+            text("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'platform_group_links'")
+        ).scalar() == 1,
     ]
     print("1" if all(checks) else "0")
 PY
@@ -111,4 +122,4 @@ fi
 alembic upgrade head || echo "Миграции не найдены — таблицы будут созданы автоматически при старте"
 
 echo "Запуск FaceWatch API..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 8
