@@ -1,4 +1,4 @@
-# FaseWatch (FaceWatch) — Проектный контекст
+# FaceWatch (FaceWatch) — Проектный контекст
 
 ## Обзор проекта
 
