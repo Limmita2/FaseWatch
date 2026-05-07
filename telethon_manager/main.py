@@ -21,7 +21,7 @@ logger = logging.getLogger("telethon_manager")
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 TELETHON_API_KEY = os.getenv("TELETHON_API_KEY", "")
-POLL_INTERVAL = 30  # секунд
+POLL_INTERVAL = int(os.getenv("TELETHON_MANAGER_POLL_INTERVAL", "60"))  # секунд
 
 from account_worker import AccountWorker
 from history_loader import load_group_history

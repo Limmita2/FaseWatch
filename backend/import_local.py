@@ -14,10 +14,11 @@ import argparse
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from app.core.database import AsyncSessionLocal
-from app.models.models import Group, Message
+from app.models.models import Group, Message, MessagePhone
 from app.core.config import settings
 from app.api.endpoints.imports import parse_telegram_messages_html
 from app.worker.tasks import process_photo
+from app.services.phone_utils import extract_phones
 from sqlalchemy import select
 
 async def import_backup_local(zip_path: str, group_name: str, extract_dir: str = "/mnt/qnap_photos/backup/temp_extract"):
@@ -106,6 +107,7 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
 
                     has_photo = bool(msg_data["photo_rel_path"])
                     photo_hash = None
+                    photo_qnap_path = None
                     if has_photo and os.path.exists(photos_dir):
                         src_photo = os.path.join(export_dir, msg_data["photo_rel_path"])
                         if os.path.isfile(src_photo):
@@ -144,6 +146,12 @@ async def import_backup_local(zip_path: str, group_name: str, extract_dir: str =
                     if tg_msg_id:
                         existing_msg_ids.add(tg_msg_id)
                     stats["messages"] += 1
+
+                    # Извлечение телефонов
+                    if msg.text:
+                        phones = extract_phones(msg.text)
+                        for phone in phones:
+                            db.add(MessagePhone(id=uuid.uuid4(), message_id=msg.id, phone=phone))
 
                     # Ставим задачи в очередь только после commit, иначе воркер может
                     # успеть прочитать БД до появления Message и вернуть Message not found.

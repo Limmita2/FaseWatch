@@ -18,7 +18,7 @@ services:
     restart: always
     command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru --save 60 1000 --appendonly yes
 
-  # Ollama (отключён, оставлен в запас)
+  # Ollama (отключён)
   # ollama:
   #   image: ollama/ollama:latest
   #   container_name: facewatch_ollama
@@ -30,6 +30,8 @@ services:
   #   environment:
   #     - OLLAMA_NUM_PARALLEL=2
   #     - OLLAMA_MAX_LOADED_MODELS=1
+  #     - OLLAMA_NUM_THREAD=44
+  #     - OLLAMA_NUM_GPU=0
 
   backend:
     build:
@@ -64,7 +66,7 @@ services:
       dockerfile: Dockerfile
     container_name: facewatch_celery
     restart: always
-    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=16 --pool=prefork --max-tasks-per-child=100 --prefetch-multiplier=4
+    command: celery -A app.worker.celery_app worker --loglevel=info --concurrency=${CELERY_CONCURRENCY:-8} --pool=prefork --max-tasks-per-child=100 --prefetch-multiplier=${CELERY_PREFETCH_MULTIPLIER:-2}
     env_file: .env
     environment:
       - DATABASE_URL=mysql+aiomysql://${MARIADB_USER}:${MARIADB_PASSWORD}@${MARIADB_HOST}:${MARIADB_PORT}/${MARIADB_DB}
@@ -79,6 +81,8 @@ services:
       - OMP_NUM_THREADS=3
       - MKL_NUM_THREADS=3
       - OPENBLAS_NUM_THREADS=3
+      - CELERY_CONCURRENCY=${CELERY_CONCURRENCY:-8}
+      - CELERY_PREFETCH_MULTIPLIER=${CELERY_PREFETCH_MULTIPLIER:-2}
     volumes:
       - /mnt/qnap_photos:/mnt/qnap_photos
     depends_on:

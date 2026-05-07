@@ -340,8 +340,12 @@ async def search_by_text(
 
     # FULLTEXT поиск — используем сырой SQL MATCH AGAINST для MariaDB
     # Экранируем запрос, убираем спецсимволы boolean mode
-    safe_q = q.replace("'", "''").replace("+", "").replace("-", "").replace("*", "").replace("(", "").replace(")", "")
-    
+    clean_q = q.replace("'", "''").replace("+", "").replace("-", "").replace("*", "").replace("(", "").replace(")", "").replace('"', "")
+
+    # Разбиваем на слова и добавляем '+' перед каждым для логики AND в BOOLEAN MODE
+    words = [w.strip() for w in clean_q.split() if w.strip()]
+    safe_q = " ".join(f"+{w}" for w in words) if words else clean_q
+
     stmt = (
         select(Message, Group.name.label("group_name"))
         .join(Group, Message.group_id == Group.id, isouter=False)
@@ -356,7 +360,10 @@ async def search_by_text(
         rows = result.all()
     except Exception:
         # Fallback на LIKE если FULLTEXT-индекс ещё не создан
-        stmt_fallback = stmt.where(Message.text.like(f"%{q}%")).order_by(Message.timestamp.desc()).offset(offset).limit(limit)
+        stmt_fallback = stmt
+        for w in words:
+            stmt_fallback = stmt_fallback.where(Message.text.like(f"%{w}%"))
+        stmt_fallback = stmt_fallback.order_by(Message.timestamp.desc()).offset(offset).limit(limit)
         result = await db.execute(stmt_fallback)
         rows = result.all()
 

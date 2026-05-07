@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     OLLAMA_TIMEOUT: int = 180
 
     # InsightFace
-    FACE_SIMILARITY_THRESHOLD: float = 0.75
+    FACE_SIMILARITY_THRESHOLD: float = 0.45
     FACE_CROP_PADDING: float = 0.3
 
     class Config:

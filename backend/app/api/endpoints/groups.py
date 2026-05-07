@@ -3,7 +3,7 @@ Endpoints для управления группами.
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -33,22 +33,26 @@ async def list_groups(
     db: AsyncSession = Depends(get_db),
     user=Depends(get_current_user),
 ):
-    stmt = select(Group)
+    last_message_subq = (
+        select(
+            Message.group_id.label("group_id"),
+            func.max(Message.timestamp).label("last_message_at"),
+        )
+        .group_by(Message.group_id)
+        .subquery()
+    )
+
+    stmt = (
+        select(Group, last_message_subq.c.last_message_at)
+        .outerjoin(last_message_subq, last_message_subq.c.group_id == Group.id)
+    )
     if user.role != "admin":
         stmt = stmt.where(Group.is_public == True)
     stmt = stmt.order_by(Group.created_at.desc())
-    
+
     result = await db.execute(stmt)
-    groups = result.scalars().all()
     out = []
-    for g in groups:
-        last = await db.execute(
-            select(Message.timestamp)
-            .where(Message.group_id == g.id)
-            .order_by(Message.timestamp.desc())
-            .limit(1)
-        )
-        last_ts = last.scalar_one_or_none()
+    for g, last_ts in result.all():
         out.append(GroupOut(
             id=str(g.id),
             telegram_id=g.telegram_id,

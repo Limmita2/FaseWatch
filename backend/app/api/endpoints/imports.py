@@ -20,8 +20,9 @@ import re
 
 from app.core.database import get_db
 from app.core.config import settings
-from app.models.models import Group, Message
+from app.models.models import Group, Message, MessagePhone
 from app.api.deps import get_current_user
+from app.services.phone_utils import extract_phones
 
 router = APIRouter()
 
@@ -184,6 +185,12 @@ async def import_backup(
             )
             db.add(msg)
             stats["messages"] += 1
+
+            # Извлечение телефонов
+            if msg.text:
+                phones = extract_phones(msg.text)
+                for phone in phones:
+                    db.add(MessagePhone(id=uuid.uuid4(), message_id=msg.id, phone=phone))
 
             # Ставим задачи в очередь только после commit, иначе воркер может
             # забрать task раньше, чем Message станет видимым в БД.

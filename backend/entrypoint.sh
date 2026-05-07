@@ -122,4 +122,5 @@ fi
 alembic upgrade head || echo "Миграции не найдены — таблицы будут созданы автоматически при старте"
 
 echo "Запуск FaceWatch API..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 8
+UVICORN_WORKERS="${UVICORN_WORKERS:-4}"
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers "$UVICORN_WORKERS"
