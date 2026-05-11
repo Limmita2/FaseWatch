@@ -179,6 +179,7 @@ async def search_by_face(
             msg_ids.add(uuid.UUID(p["message_id"]))
         if p.get("face_id"):
             face_ids.add(uuid.UUID(p["face_id"]))
+        # person_id can be in payload
 
     # 1) Batch: все сообщения
     messages_map = {}
@@ -228,10 +229,34 @@ async def search_by_face(
         face_results.append({
             "similarity": round(match.score * 100, 1),
             "face_id": face_id_str,
+            "person_id": payload.get("person_id"),
             "crop_path": face_crop_path,
             "photo_path": matched_photo_path,
             "group_name": group_name,
+            "group_notes": group.notes if group else None,
         })
+
+    # Группировка по person_id
+    grouped_results = []
+    person_map = {} # person_id -> list of matches
+    
+    for res in face_results:
+        pid = res.get("person_id") or f"unclustered_{res['face_id']}"
+        if pid not in person_map:
+            person_map[pid] = []
+        person_map[pid].append(res)
+    
+    for pid, matches in person_map.items():
+        # Сортируем внутри группы по схожести
+        matches.sort(key=lambda x: x["similarity"], reverse=True)
+        grouped_results.append({
+            "person_id": pid,
+            "best_similarity": matches[0]["similarity"],
+            "matches": matches
+        })
+    
+    # Сортируем группы по лучшей схожести
+    grouped_results.sort(key=lambda x: x["best_similarity"], reverse=True)
 
     # Собираем финальный массив results
     final_results = []
@@ -240,7 +265,7 @@ async def search_by_face(
             final_results.append({
                 "face_index": i,
                 "bbox": detected_faces[i].bbox.tolist(),
-                "matches": face_results
+                "person_groups": grouped_results
             })
         else:
             final_results.append({
@@ -347,14 +372,14 @@ async def search_by_text(
     safe_q = " ".join(f"+{w}" for w in words) if words else clean_q
 
     stmt = (
-        select(Message, Group.name.label("group_name"))
+        select(Message, Group.name.label("group_name"), Group.notes.label("group_notes"))
         .join(Group, Message.group_id == Group.id, isouter=False)
     )
     if user.role != "admin":
         stmt = stmt.where(Group.is_public == True)
 
     stmt_ft = stmt.where(text("MATCH(messages.text) AGAINST(:q IN BOOLEAN MODE)")).order_by(Message.timestamp.desc()).offset(offset).limit(limit)
-    
+
     try:
         result = await db.execute(stmt_ft, {"q": safe_q})
         rows = result.all()
@@ -382,7 +407,7 @@ async def search_by_text(
     async def _fetch_ctx(msg_id_str: str, msg) -> tuple:
         if not msg.timestamp or not msg.group_id:
             return msg_id_str, {"before": [], "after": []}
-            
+
         before_q = await db.execute(
             select(Message)
             .where(
@@ -393,7 +418,7 @@ async def search_by_text(
             .limit(6)
         )
         b_list = before_q.scalars().all()
-        
+
         after_q = await db.execute(
             select(Message)
             .where(
@@ -404,10 +429,10 @@ async def search_by_text(
             .limit(6)
         )
         a_list = after_q.scalars().all()
-        
+
         before = [m for m in b_list if str(m.id) != str(msg.id)][:5]
         after = [m for m in a_list if str(m.id) != str(msg.id)][:5]
-        
+
         return msg_id_str, {
             "before": list(reversed(before)),
             "after": list(after),
@@ -415,15 +440,16 @@ async def search_by_text(
 
     context_map = {}
     if rows:
-        for msg, _ in rows:
+        for msg, _, _ in rows:
             _, ctx = await _fetch_ctx(str(msg.id), msg)
             context_map[str(msg.id)] = ctx
 
     results_data = []
-    for msg, gname in rows:
+    for msg, gname, gnotes in rows:
         ctx = context_map.get(str(msg.id), {"before": [], "after": []})
         context = {
             "group_name": gname,
+            "group_notes": gnotes,
             "before": [ser(m) for m in ctx["before"]],
             "message": ser(msg),
             "after": [ser(m) for m in ctx["after"]],
@@ -432,6 +458,7 @@ async def search_by_text(
             "id": str(msg.id),
             "group_id": str(msg.group_id),
             "group_name": gname,
+            "group_notes": gnotes,
             "text": msg.text,
             "has_photo": msg.has_photo,
             "photo_path": msg.photo_path,
@@ -474,7 +501,7 @@ async def search_by_phone(
     offset = (page - 1) * limit
 
     stmt = (
-        select(Message, Group.name.label("group_name"))
+        select(Message, Group.name.label("group_name"), Group.notes.label("group_notes"))
         .join(MessagePhone, MessagePhone.message_id == Message.id)
         .join(Group, Message.group_id == Group.id)
     )
@@ -499,7 +526,7 @@ async def search_by_phone(
         }
 
     results_data = []
-    for msg, gname in rows:
+    for msg, gname, gnotes in rows:
         # Получаем номера для этого сообщения
         phones_res = await db.execute(select(MessagePhone.phone).where(MessagePhone.message_id == msg.id))
         msg_phones = [p[0] for p in phones_res.all()]
@@ -528,6 +555,7 @@ async def search_by_phone(
 
             context = {
                 "group_name": gname,
+                "group_notes": gnotes,
                 "before": [ser(m) for m in before],
                 "message": ser(msg),
                 "after": [ser(m) for m in after],
@@ -537,6 +565,7 @@ async def search_by_phone(
             "id": str(msg.id),
             "group_id": str(msg.group_id),
             "group_name": gname,
+            "group_notes": gnotes,
             "text": msg.text,
             "has_photo": msg.has_photo,
             "photo_path": msg.photo_path,

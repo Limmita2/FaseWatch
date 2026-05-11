@@ -1,7 +1,7 @@
 """
 Endpoints для управления группами.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List, Optional
@@ -22,10 +22,15 @@ class GroupOut(BaseModel):
     name: str
     bot_active: bool
     is_public: bool = True
+    notes: Optional[str] = None
     last_message_at: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class GroupNotesUpdate(BaseModel):
+    notes: Optional[str] = None
 
 
 @router.get("/", response_model=List[GroupOut])
@@ -61,9 +66,30 @@ async def list_groups(
             name=g.name,
             bot_active=g.bot_active,
             is_public=g.is_public,
+            notes=g.notes,
             last_message_at=last_ts.isoformat() if last_ts else None,
         ))
     return out
+
+
+@router.patch("/{group_id}/notes")
+async def update_group_notes(
+    group_id: str,
+    body: GroupNotesUpdate,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    """Оновлення нотаток групи. Доступно всім авторизованим користувачам."""
+    import uuid
+    gid = uuid.UUID(group_id)
+    result = await db.execute(select(Group).where(Group.id == gid))
+    group = result.scalar_one_or_none()
+    if not group:
+        raise HTTPException(status_code=404, detail="Групу не знайдено")
+
+    group.notes = body.notes
+    await db.commit()
+    return {"id": group_id, "notes": group.notes}
 
 
 @router.patch("/{group_id}/toggle-public")
@@ -73,9 +99,8 @@ async def toggle_group_public(
     user=Depends(require_admin),
 ):
     """Изменение видимости группы. Только для юзера с логином admin."""
-    from fastapi import HTTPException
     import uuid
-    
+
     if user.username != "admin":
         raise HTTPException(status_code=403, detail="Только пользователь admin может менять видимость")
 
@@ -98,7 +123,6 @@ async def delete_group(
 ):
     """Удаление группы и всех сообщений (admin only)."""
     from app.models.models import Face
-    from fastapi import HTTPException
     import uuid
 
     gid = uuid.UUID(group_id)

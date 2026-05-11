@@ -275,12 +275,12 @@ export default function SearchPage() {
                                                 </button>
                                             )}
                                         </div>
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '24px' }}>
-                                            {face.matches?.map((match: any, j: number) => (
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px' }}>
+                                            {face.person_groups?.flatMap((group: any) => group.matches).map((match: any, j: number) => (
                                                 <div
                                                     key={j}
                                                     className="glass-card"
-                                                    style={{ padding: '8px', cursor: 'pointer', position: 'relative', display: 'flex', flexDirection: 'column' }}
+                                                    style={{ padding: '8px', cursor: 'pointer', position: 'relative', display: 'flex', flexDirection: 'column', background: 'rgba(0,0,0,0.2)' }}
                                                     onClick={async () => {
                                                         setExpandedMatch({ ...match, context: null });
                                                         setContextLoading(true);
@@ -293,7 +293,6 @@ export default function SearchPage() {
                                                         setContextLoading(false);
                                                     }}
                                                 >
-                                                    {/* Percentage Badge Overlay */}
                                                     <div style={{
                                                         position: 'absolute', top: 12, right: 12,
                                                         background: match.similarity > 80 ? 'var(--fw-success, #22c55e)' : match.similarity > 60 ? 'var(--fw-warning, #f59e0b)' : 'var(--fw-text-muted)',
@@ -314,14 +313,19 @@ export default function SearchPage() {
                                                     <div
                                                         style={{ marginTop: '4px', fontSize: '11px', textAlign: 'center', color: 'var(--fw-text-dim)', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '4px', userSelect: 'text', cursor: 'text' }}
                                                         onClick={(e) => { e.stopPropagation(); }}
-                                                        title="Скопіювати ID фото"
                                                     >
                                                         ID: {(match.photo_path || match.crop_path || '').split('/').pop()}
                                                     </div>
+                                                    {match.group_name && (
+                                                        <div style={{ marginTop: '4px', fontSize: '11px', textAlign: 'center' }}>
+                                                            <span style={{ color: 'var(--fw-text-muted)' }}>{match.group_name}</span>
+                                                            {match.group_notes && <div style={{ color: 'var(--fw-warning)', opacity: 0.85, fontStyle: 'italic', marginTop: '2px' }}>{match.group_notes}</div>}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
-                                        {(!face.matches || face.matches.length === 0) && (
+                                        {(!face.person_groups || face.person_groups.length === 0) && (
                                             <div className="glass-card" style={{ padding: '24px', textAlign: 'center', marginTop: '12px', borderLeft: '4px solid var(--fw-warning)' }}>
                                                 <p style={{ color: 'var(--fw-warning)', fontSize: '16px', marginBottom: '8px', fontWeight: 700, textTransform: 'uppercase' }}>[ ЗБІГІВ У БАЗІ НЕ ЗНАЙДЕНО ]</p>
                                                 <p style={{ color: 'var(--fw-text-dim)', fontSize: '14px' }}>Обличчя відсутнє у векторах або поріг схожості занадто високий.</p>
@@ -350,12 +354,15 @@ export default function SearchPage() {
                                 key={r.id}
                                 className="glass-card"
                                 style={{ padding: '14px', cursor: 'pointer', transition: 'border-color 0.2s', border: '1px solid transparent' }}
-                                onClick={() => setExpandedMatch({ ...r, similarity: null })} // similarity is null for text search
+                                onClick={() => setExpandedMatch({ ...r, similarity: null })}
                                 onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--fw-primary, #3b82f6)'}
                                 onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
                             >
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                    <span className="badge badge-primary">{r.group_name || '—'}</span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <span className="badge badge-primary">{r.group_name || '—'}</span>
+                                        {r.group_notes && <span style={{ fontSize: '11px', color: 'var(--fw-warning)', opacity: 0.85, fontStyle: 'italic' }}>{r.group_notes}</span>}
+                                    </div>
                                     {r.sender_name && <span style={{ fontSize: '13px', fontWeight: 500 }}>{r.sender_name}</span>}
                                     <span style={{ fontSize: '12px', color: 'var(--fw-text-dim)', marginLeft: 'auto' }}>
                                         {r.timestamp ? new Date(r.timestamp).toLocaleString('uk-UA') : ''}
@@ -400,7 +407,10 @@ export default function SearchPage() {
                                 )}
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                        <span className="badge badge-primary">{r.group_name || '—'}</span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <span className="badge badge-primary">{r.group_name || '—'}</span>
+                                            {r.group_notes && <span style={{ fontSize: '11px', color: 'var(--fw-warning)', opacity: 0.85, fontStyle: 'italic' }}>{r.group_notes}</span>}
+                                        </div>
                                         {r.sender_name && <span style={{ fontSize: '13px', fontWeight: 500 }}>{r.sender_name}</span>}
                                         <span style={{ fontSize: '12px', color: 'var(--fw-text-dim)', marginLeft: 'auto' }}>
                                             {r.timestamp ? new Date(r.timestamp).toLocaleString('uk-UA') : ''}
@@ -454,8 +464,9 @@ export default function SearchPage() {
 
                                 {expandedMatch.context ? (
                                     <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '16px', fontSize: '15px', flex: 1 }}>
-                                        <div style={{ marginBottom: '16px' }}>
+                                        <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                                             <span className="badge badge-primary">📂 Группа: {expandedMatch.context.group_name || '—'}</span>
+                                            {expandedMatch.context.group_notes && <span style={{ fontSize: '12px', color: 'var(--fw-warning)', opacity: 0.85, fontStyle: 'italic', paddingLeft: '4px' }}>{expandedMatch.context.group_notes}</span>}
                                         </div>
 
                                         {expandedMatch.context.before?.map((msg: any, idx: number) => (

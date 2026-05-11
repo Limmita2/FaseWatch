@@ -6,13 +6,16 @@ import uuid
 COLLECTION_NAME = "faces"
 VECTOR_SIZE = 512
 
+# Поріг схожості для об'єднання лиць в одну особу (70%)
+PERSON_THRESHOLD = float(0.60)
+
 
 def get_qdrant_client() -> QdrantClient:
     return QdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
 
 
 def ensure_collection_exists():
-    """Создаёт коллекцию faces в Qdrant, если её нет."""
+    """Створює колекцію faces у Qdrant, якщо її немає."""
     client = get_qdrant_client()
     existing = [c.name for c in client.get_collections().collections]
     if COLLECTION_NAME not in existing:
@@ -20,22 +23,13 @@ def ensure_collection_exists():
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
         )
-        # Payload-индексы для быстрой фильтрации при поиске
-        client.create_payload_index(
-            collection_name=COLLECTION_NAME,
-            field_name="message_id",
-            field_schema="keyword",
-        )
-        client.create_payload_index(
-            collection_name=COLLECTION_NAME,
-            field_name="face_id",
-            field_schema="keyword",
-        )
-        client.create_payload_index(
-            collection_name=COLLECTION_NAME,
-            field_name="group_id",
-            field_schema="keyword",
-        )
+        # Payload-індекси для швидкої фільтрації при пошуку
+        for field in ("message_id", "face_id", "group_id", "person_id"):
+            client.create_payload_index(
+                collection_name=COLLECTION_NAME,
+                field_name=field,
+                field_schema="keyword",
+            )
     return client
 
 
@@ -45,7 +39,7 @@ def upsert_face_vector(
     vector: list[float],
     payload: dict,
 ):
-    """Сохраняет вектор лица в Qdrant."""
+    """Зберігає вектор лиця у Qdrant."""
     point_id = str(uuid.uuid4())
     client.upsert(
         collection_name=COLLECTION_NAME,
@@ -61,7 +55,7 @@ def search_similar_faces(
     score_threshold: float = 0.0,
     group_ids: list[str] = None,
 ):
-    """Ищет похожие лица в Qdrant (qdrant-client >= 1.17.0)."""
+    """Шукає схожі лиця у Qdrant."""
     from qdrant_client.models import Filter, FieldCondition, MatchAny
 
     query_filter = None
@@ -84,3 +78,43 @@ def search_similar_faces(
     )
     return result.points
 
+
+def find_person_for_vector(
+    client: QdrantClient,
+    vector: list[float],
+    threshold: float = PERSON_THRESHOLD,
+) -> str | None:
+    """
+    Шукає існуючу особу (person_id) для нового вектора лиця.
+    Повертає person_id якщо знайдено схоже лице, або None якщо нова особа.
+    """
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+    # Шукаємо лише серед лиць, що вже мають person_id
+    query_filter = Filter(
+        must_not=[
+            FieldCondition(key="person_id", match=MatchValue(value=""))
+        ]
+    )
+
+    result = client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=vector,
+        limit=1,
+        score_threshold=threshold,
+        with_payload=True,
+    )
+
+    if result.points and result.points[0].payload.get("person_id"):
+        return result.points[0].payload["person_id"]
+    return None
+
+
+def update_point_person_id(client: QdrantClient, point_id: str, person_id: str):
+    """Оновлює person_id у payload конкретної точки Qdrant."""
+    from qdrant_client.models import SetPayload
+    client.set_payload(
+        collection_name=COLLECTION_NAME,
+        payload={"person_id": person_id},
+        points=[point_id],
+    )

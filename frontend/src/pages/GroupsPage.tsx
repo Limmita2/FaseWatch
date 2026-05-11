@@ -6,7 +6,6 @@ export default function GroupsPage() {
     const [groups, setGroups] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const role = useAuthStore(state => state.role);
-
     const loadGroups = () => {
         groupsApi.list().then(r => { setGroups(r.data); setLoading(false); }).catch(() => setLoading(false));
     };
@@ -28,6 +27,14 @@ export default function GroupsPage() {
         }
     };
 
+    const handleNotesBlur = (id: string, currentNotes: string | null, newValue: string) => {
+        const val = newValue.trim() || null;
+        if (val === currentNotes) return;
+        groupsApi.updateNotes(id, val).then(() => {
+            setGroups(prev => prev.map(g => g.id === id ? { ...g, notes: val } : g));
+        }).catch(() => {});
+    };
+
     if (loading) return <div style={{ display: 'flex', justifyContent: 'center', padding: '80px' }}><div className="spinner" /></div>;
 
     return (
@@ -42,7 +49,7 @@ export default function GroupsPage() {
                             <th>НАЗВА ГРУПИ</th>
                             <th>ПЛАТФОРМА</th>
                             <th>ID ДЖЕРЕЛА</th>
-                            <th>СТАТУС БОТА</th>
+                            <th>НОТАТКИ</th>
                             <th>ОСТАННІЙ ПІНГ</th>
                             {role === 'admin' && <th>В ПОШУКУ</th>}
                         </tr>
@@ -53,10 +60,15 @@ export default function GroupsPage() {
                                 <td style={{ fontWeight: 500 }}>{g.name}</td>
                                 <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)', textTransform: 'uppercase' }}>{g.source_platform || 'telegram'}</td>
                                 <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)' }}>{g.external_id || g.telegram_id || '—'}</td>
-                                <td>
-                                    <span className={`badge ${g.bot_active ? 'badge-success' : 'badge-danger'}`}>
-                                        {g.bot_active ? '[ АКТИВНО ]' : '[ ОФЛАЙН ]'}
-                                    </span>
+                                <td style={{ minWidth: '180px' }}>
+                                    <input
+                                        type="text"
+                                        defaultValue={g.notes || ''}
+                                        placeholder="—"
+                                        style={{ width: '100%', background: 'transparent', border: '1px solid transparent', borderRadius: '4px', color: 'var(--fw-text)', fontSize: '13px', padding: '4px 8px', outline: 'none', cursor: 'text' }}
+                                        onFocus={e => { e.currentTarget.style.borderColor = 'var(--fw-primary)'; e.currentTarget.style.background = 'rgba(59,130,246,0.07)'; }}
+                                        onBlur={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent'; handleNotesBlur(g.id, g.notes, e.currentTarget.value); }}
+                                    />
                                 </td>
                                 <td style={{ fontSize: '13px', color: 'var(--fw-text-muted)' }}>
                                     {g.last_message_at ? new Date(g.last_message_at).toLocaleString('uk-UA') : '—'}

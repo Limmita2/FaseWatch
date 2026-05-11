@@ -117,8 +117,10 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
     try:
         import cv2
 
-        from app.models.models import Face, Message
-        from app.services.qdrant_service import ensure_collection_exists, upsert_face_vector
+        from app.models.models import Face, Message, Person
+        from app.services.qdrant_service import (
+            ensure_collection_exists, upsert_face_vector, find_person_for_vector
+        )
         from app.services.storage_service import save_face_crop_to_qnap
 
         # Celery передаёт все параметры как строки (JSON) — конвертируем в UUID
@@ -207,7 +209,32 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
             except Exception as crop_err:
                 logger.warning("Не удалось сохранить кроп: %s", crop_err)
 
-            # Сохраняем вектор в Qdrant
+            # ── Incremental person matching (threshold=0.70) ──
+            existing_person_id = find_person_for_vector(qdrant_client, vector)
+            if existing_person_id:
+                person_id = existing_person_id
+                # Оновлюємо лічильник та last_seen для існуючої особи
+                person_obj = session.query(Person).filter_by(id=person_id).first()
+                if person_obj:
+                    person_obj.face_count = (person_obj.face_count or 0) + 1
+                    if message.timestamp:
+                        if not person_obj.last_seen or message.timestamp > person_obj.last_seen:
+                            person_obj.last_seen = message.timestamp
+            else:
+                person_id = str(uuid.uuid4())
+                ts = message.timestamp if message.timestamp else None
+                new_person = Person(
+                    id=person_id,
+                    face_count=1,
+                    thumbnail_face_id=str(face.id),
+                    first_seen=ts,
+                    last_seen=ts,
+                )
+                session.add(new_person)
+
+            face.person_id = person_id
+
+            # Зберігаємо вектор у Qdrant (з person_id у payload)
             point_id = upsert_face_vector(
                 qdrant_client,
                 face_id=str(face.id),
@@ -217,6 +244,7 @@ def process_photo(self, message_id: str, photo_path: str, group_id: str, timesta
                     "message_id": message_id,
                     "group_id": group_id,
                     "timestamp": timestamp_str,
+                    "person_id": person_id,
                 },
             )
             face.qdrant_point_id = uuid.UUID(point_id)

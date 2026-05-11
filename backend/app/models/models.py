@@ -94,6 +94,20 @@ class PlatformGroupLink(Base):
     )
 
 
+class Person(Base):
+    """Кластер лиць, що належать одній особі."""
+    __tablename__ = "persons"
+
+    id = Column(String(36), primary_key=True)
+    face_count = Column(Integer, nullable=False, default=1, server_default='1')
+    thumbnail_face_id = Column(String(36), nullable=True)  # face_id репрезентативного лиця
+    first_seen = Column(TIMESTAMP, nullable=True)
+    last_seen = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    faces = relationship("Face", back_populates="person", foreign_keys="Face.person_id")
+
+
 class Group(Base):
     __tablename__ = "groups"
 
@@ -105,6 +119,7 @@ class Group(Base):
     bot_active = Column(Boolean, default=True)
     is_approved = Column(Boolean, default=False, server_default='0', nullable=False)
     is_public = Column(Boolean, default=True, server_default='1', nullable=False)
+    notes = Column(Text, nullable=True)  # Ручні нотатки оператора
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     messages = relationship("Message", back_populates="group")
@@ -163,6 +178,7 @@ class Face(Base):
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     message_id = Column(Uuid, ForeignKey("messages.id"), nullable=True)
+    person_id = Column(String(36), ForeignKey("persons.id"), nullable=True)
     crop_path = Column(Text, nullable=True)
     qdrant_point_id = Column(Uuid, nullable=True)
     bbox = Column(JSON, nullable=True)
@@ -170,10 +186,12 @@ class Face(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     message = relationship("Message", back_populates="faces")
+    person = relationship("Person", back_populates="faces", foreign_keys=[person_id])
 
     __table_args__ = (
         Index("ix_faces_message_id", "message_id"),
         Index("ix_faces_qdrant_point_id", "qdrant_point_id"),
+        Index("ix_faces_person_id", "person_id"),
     )
 
 

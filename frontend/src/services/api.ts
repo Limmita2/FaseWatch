@@ -87,6 +87,7 @@ export const groupsApi = {
     list: () => api.get('/groups/'),
     delete: (id: string) => api.delete(`/groups/${id}`),
     toggleVisibility: (id: string) => api.patch(`/groups/${id}/toggle-public`),
+    updateNotes: (id: string, notes: string | null) => api.patch(`/groups/${id}/notes`, { notes }),
 };
 
 // ===== Import =====
