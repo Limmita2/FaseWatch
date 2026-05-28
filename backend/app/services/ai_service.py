@@ -38,80 +38,215 @@ SYSTEM_PROMPT_GENERAL = SYSTEM_PROMPT_BASE + """
 Контекст: загальний аналітичний діалог по доступних даних FaceWatch.
 """
 
-AI_NUM_CTX = 4096
-
-
-class OllamaService:
+class GeminiService:
     def __init__(self) -> None:
-        self.base_url = settings.OLLAMA_URL.rstrip("/")
-        self.model = settings.OLLAMA_MODEL
-        self.timeout = settings.OLLAMA_TIMEOUT
+        self.base_url = settings.GEMINI_API_BASE_URL.rstrip("/")
+        self.model = settings.GEMINI_MODEL
+        self.fallback_models = [
+            model.strip()
+            for model in settings.GEMINI_FALLBACK_MODELS.split(",")
+            if model.strip()
+        ]
+        self.api_key = settings.GEMINI_API_KEY
+        self.timeout = settings.GEMINI_TIMEOUT
+        self.temperature = settings.GEMINI_TEMPERATURE
+
+    def _headers(self) -> dict[str, str]:
+        if not self.api_key:
+            raise RuntimeError("GEMINI_API_KEY is not configured")
+        return {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
+
+    @staticmethod
+    def _clean_model_name(model: str) -> str:
+        return model.removeprefix("models/").strip()
+
+    def _candidate_models(self) -> list[str]:
+        models = [self.model, *self.fallback_models]
+        result: list[str] = []
+        for model in models:
+            clean = self._clean_model_name(model)
+            if clean and clean not in result:
+                result.append(clean)
+        return result
+
+    def _url(self, method: str, model: str | None = None, stream: bool = False) -> str:
+        model_name = self._clean_model_name(model or self.model)
+        suffix = f"/models/{model_name}:{method}"
+        if stream:
+            suffix += "?alt=sse"
+        return f"{self.base_url}{suffix}"
+
+    def _build_payload(self, messages: list[dict], system_prompt: str | None = None) -> dict:
+        contents = []
+        for message in messages:
+            content = str(message.get("content") or "").strip()
+            if not content:
+                continue
+            role = "model" if message.get("role") == "assistant" else "user"
+            contents.append({"role": role, "parts": [{"text": content}]})
+
+        payload: dict = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": self.temperature,
+                "topP": 0.95,
+            },
+        }
+        if system_prompt:
+            payload["systemInstruction"] = {"parts": [{"text": system_prompt.strip()}]}
+        return payload
+
+    @staticmethod
+    def _extract_text(data: dict) -> str:
+        chunks: list[str] = []
+        for candidate in data.get("candidates") or []:
+            content = candidate.get("content") or {}
+            for part in content.get("parts") or []:
+                text = part.get("text")
+                if text:
+                    chunks.append(text)
+        return "".join(chunks)
+
+    @staticmethod
+    def _error_detail(response: httpx.Response) -> str:
+        try:
+            data = response.json()
+            message = ((data.get("error") or {}).get("message") or "").strip()
+            if message:
+                return message
+        except Exception:
+            pass
+        return response.text.strip() or response.reason_phrase
+
+    @staticmethod
+    def _is_retryable_error(status_code: int | None, message: str) -> bool:
+        lowered = message.lower()
+        retryable_markers = (
+            "high demand",
+            "overloaded",
+            "temporarily unavailable",
+            "try again later",
+            "rate limit",
+            "quota",
+            "resource exhausted",
+        )
+        return status_code in {429, 500, 502, 503, 504} or any(
+            marker in lowered for marker in retryable_markers
+        )
 
     async def is_available(self) -> bool:
+        if not self.api_key:
+            return False
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.get(f"{self.base_url}/api/tags")
+                response = await client.get(
+                    f"{self.base_url}/models/{self.model}",
+                    headers=self._headers(),
+                )
                 response.raise_for_status()
-                models = response.json().get("models", [])
-                return any(model.get("name") == self.model for model in models)
+                return True
         except Exception:
             return False
 
     async def get_status(self) -> dict:
-        version = "unknown"
-        available = False
+        if not self.api_key:
+            return {
+                "available": False,
+                "provider": "gemini",
+                "model": self.model,
+                "version": "api",
+                "detail": "GEMINI_API_KEY is not configured",
+            }
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                tags_response = await client.get(f"{self.base_url}/api/tags")
-                tags_response.raise_for_status()
-                models = tags_response.json().get("models", [])
-                available = any(model.get("name") == self.model for model in models)
-
-                version_response = await client.get(f"{self.base_url}/api/version")
-                if version_response.status_code == 200:
-                    version = version_response.json().get("version", "unknown")
-        except Exception:
-            pass
-        return {
-            "available": available,
-            "model": self.model,
-            "version": version,
-        }
+                response = await client.get(
+                    f"{self.base_url}/models/{self.model}",
+                    headers=self._headers(),
+                )
+                if response.is_error:
+                    raise RuntimeError(self._error_detail(response))
+                data = response.json()
+                return {
+                    "available": True,
+                    "provider": "gemini",
+                    "model": self.model,
+                    "fallback_models": self.fallback_models,
+                    "version": data.get("version") or data.get("displayName") or "api",
+                }
+        except Exception as exc:
+            return {
+                "available": False,
+                "provider": "gemini",
+                "model": self.model,
+                "fallback_models": self.fallback_models,
+                "version": "api",
+                "detail": str(exc),
+            }
 
     async def chat(self, messages: list[dict], system_prompt: str) -> AsyncGenerator[str, None]:
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "stream": True,
-            "system": system_prompt.strip(),
-            "options": {"num_ctx": AI_NUM_CTX},
-        }
+        payload = self._build_payload(messages, system_prompt)
+        errors: list[str] = []
 
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", f"{self.base_url}/api/chat", json=payload) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    chunk = (data.get("message") or {}).get("content") or ""
-                    if chunk:
-                        yield chunk
+        for model in self._candidate_models():
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "POST",
+                    self._url("streamGenerateContent", model=model, stream=True),
+                    headers=self._headers(),
+                    json=payload,
+                ) as response:
+                    if response.is_error:
+                        body = (await response.aread()).decode("utf-8", errors="replace")
+                        try:
+                            data = json.loads(body)
+                            message = ((data.get("error") or {}).get("message") or "").strip()
+                        except Exception:
+                            message = body.strip()
+                        message = message or response.reason_phrase
+                        errors.append(f"{model}: {message}")
+                        if self._is_retryable_error(response.status_code, message):
+                            continue
+                        raise RuntimeError(message)
+
+                    async for line in response.aiter_lines():
+                        line = line.strip()
+                        if not line or not line.startswith("data:"):
+                            continue
+                        raw = line[5:].strip()
+                        if raw == "[DONE]":
+                            continue
+                        try:
+                            data = json.loads(raw)
+                        except json.JSONDecodeError:
+                            continue
+                        chunk = self._extract_text(data)
+                        if chunk:
+                            yield chunk
+                    return
+
+        raise RuntimeError("; ".join(errors) or "Gemini models are unavailable")
 
     async def generate(self, prompt: str) -> str:
-        payload = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False,
-            "options": {"num_ctx": AI_NUM_CTX},
-        }
-        async with httpx.AsyncClient(timeout=300) as client:
-            response = await client.post(f"{self.base_url}/api/generate", json=payload)
-            response.raise_for_status()
-            return response.json().get("response", "")
+        payload = self._build_payload([{"role": "user", "content": prompt}])
+        errors: list[str] = []
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            for model in self._candidate_models():
+                response = await client.post(
+                    self._url("generateContent", model=model),
+                    headers=self._headers(),
+                    json=payload,
+                )
+                if response.is_error:
+                    message = self._error_detail(response)
+                    errors.append(f"{model}: {message}")
+                    if self._is_retryable_error(response.status_code, message):
+                        continue
+                    raise RuntimeError(message)
+                return self._extract_text(response.json())
+        raise RuntimeError("; ".join(errors) or "Gemini models are unavailable")
 
 
-ollama_service = OllamaService()
+ai_service = GeminiService()

@@ -1,7 +1,7 @@
 """
 Endpoints для поиска: по фото (лицу) и по тексту.
 """
-from fastapi import APIRouter, Depends, UploadFile, File, Query
+from fastapi import APIRouter, Depends, UploadFile, File, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, func, text
 from typing import Optional
@@ -349,6 +349,110 @@ async def get_face_context(
             "message": ser(msg),
             "after": [ser(m) for m in after],
         }
+    }
+
+
+@router.get("/person/{person_id}")
+async def search_by_person_id(
+    person_id: str,
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=100),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_user),
+):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=400, detail="person_id is required")
+
+    offset = (page - 1) * limit
+    filters = [
+        Face.person_id == person_id,
+        Face.message_id.is_not(None),
+    ]
+    if user.role != "admin":
+        filters.append(Group.is_public == True)
+
+    total_result = await db.execute(
+        select(func.count(Face.id))
+        .join(Message, Face.message_id == Message.id)
+        .join(Group, Message.group_id == Group.id)
+        .where(and_(*filters))
+    )
+    total = total_result.scalar() or 0
+
+    result = await db.execute(
+        select(Face, Message, Group.name.label("group_name"), Group.notes.label("group_notes"))
+        .join(Message, Face.message_id == Message.id)
+        .join(Group, Message.group_id == Group.id)
+        .where(and_(*filters))
+        .order_by(Message.timestamp.desc(), Face.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    rows = result.all()
+
+    def ser(m):
+        return {
+            "id": str(m.id),
+            "text": m.text,
+            "has_photo": m.has_photo,
+            "photo_path": m.photo_path,
+            "timestamp": m.timestamp.isoformat() if m.timestamp else None,
+            "sender_name": m.sender_name,
+        }
+
+    results_data = []
+    for face, msg, group_name, group_notes in rows:
+        before = []
+        after = []
+        if msg.timestamp and msg.group_id:
+            before_q = await db.execute(
+                select(Message)
+                .where(Message.group_id == msg.group_id, Message.timestamp <= msg.timestamp)
+                .order_by(Message.timestamp.desc())
+                .limit(4)
+            )
+            before = [m for m in before_q.scalars().all() if str(m.id) != str(msg.id)][:3]
+            before = list(reversed(before))
+
+            after_q = await db.execute(
+                select(Message)
+                .where(Message.group_id == msg.group_id, Message.timestamp >= msg.timestamp)
+                .order_by(Message.timestamp.asc())
+                .limit(4)
+            )
+            after = [m for m in after_q.scalars().all() if str(m.id) != str(msg.id)][:3]
+
+        context = {
+            "group_name": group_name,
+            "group_notes": group_notes,
+            "before": [ser(m) for m in before],
+            "message": ser(msg),
+            "after": [ser(m) for m in after],
+        }
+
+        results_data.append(
+            {
+                "face_id": str(face.id),
+                "person_id": face.person_id,
+                "crop_path": face.crop_path,
+                "message_id": str(msg.id),
+                "group_id": str(msg.group_id),
+                "group_name": group_name,
+                "group_notes": group_notes,
+                "text": msg.text,
+                "has_photo": msg.has_photo,
+                "photo_path": msg.photo_path,
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "sender_name": msg.sender_name,
+                "context": context,
+            }
+        )
+
+    return {
+        "query": person_id,
+        "total": total,
+        "results": results_data,
     }
 
 

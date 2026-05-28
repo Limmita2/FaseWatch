@@ -152,7 +152,7 @@ class Message(Base):
     source_platform = Column(String(20), nullable=False, default="telegram", server_default="telegram")
     source_account_id = Column(Uuid, ForeignKey("telegram_accounts.id"), nullable=True)
     source_type = Column(String(10), default="bot")  # bot | account | import
-    document_text = Column(Text, nullable=True)  # витягнутий текст з PDF/DOCX
+    document_text = Column(Text(length=2**32 - 1), nullable=True)  # витягнутий текст з PDF/DOCX (LONGTEXT)
     document_name = Column(String(255), nullable=True)
 
     group = relationship("Group", back_populates="messages")

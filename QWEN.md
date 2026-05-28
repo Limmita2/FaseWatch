@@ -2,13 +2,13 @@
 
 ## Обзор проекта
 
-**FaseWatch** — система мониторинга мессенджеров (Telegram, Signal, WhatsApp) с распознаванием лиц. Боты и Telethon-аккаунты собирают сообщения и фото из групп, распознают лица через InsightFace, сохраняют векторные эмбеддинги в Qdrant, и предоставляют веб-интерфейс для поиска и управления. Встроенный AI-модуль (Ollama) генерирует аналитические отчёты и брифинги.
+**FaseWatch** — система мониторинга мессенджеров (Telegram, Signal, WhatsApp) с распознаванием лиц. Боты и Telethon-аккаунты собирают сообщения и фото из групп, распознают лица через InsightFace, сохраняют векторные эмбеддинги в Qdrant, и предоставляют веб-интерфейс для поиска и управления. Встроенный AI-модуль на Gemini генерирует аналитические ответы и брифинги.
 
 ### Ключевые возможности
 - Сбор сообщений и фото из Telegram, Signal, WhatsApp
 - Распознавание лиц: InsightFace (buffalo_l / ArcFace), 512-dim эмбеддинги
 - Поиск по лицу (загрузка фото → вектор → Qdrant), тексту (FULLTEXT), телефону
-- AI-модуль: чат с контекстом, ежедневные брифинги, отчёты по делам/персонам (Ollama, gemma4)
+- AI-модуль: чат с контекстом, ежедневные брифинги и read-only SQL-помощник (Gemini)
 - Импорт бэкапов Telegram (HTML/ZIP) и локальный импорт больших архивов
 - Веб-интерфейс (React + TailwindCSS) для просмотра, поиска и администрирования
 - JWT-авторизация с ролями `admin` / `operator`
@@ -26,7 +26,7 @@
 | **Telethon** | Telethon — MTProto API для сбора из личных чатов и закрытых групп |
 | **Signal Bot** | Python, signal-cli-rest-api (WebSocket), websockets, httpx |
 | **WhatsApp Bot** | Node.js, whatsapp-web.js |
-| **ML/AI** | InsightFace (buffalo_l / ArcFace), 512-dim embedding, CPU mode (ONNX Runtime); Ollama (gemma4:e4b) |
+| **ML/AI** | InsightFace (buffalo_l / ArcFace), 512-dim embedding, CPU mode (ONNX Runtime); Gemini API |
 | **БД** | MariaDB (внешний сервер на QNAP 192.168.24.178:3306, async через aiomysql) |
 | **Векторная БД** | Qdrant (коллекция `faces`, cosine similarity, 512 dim) |
 | **Очередь задач** | Celery + Redis (concurrency=8, prefork) |
@@ -198,7 +198,6 @@ User ──< AiChat ──< AiMessage                            │
 |--------|------|-------|-------------|
 | `qdrant` | 6333 (localhost) | qdrant/qdrant:latest | — |
 | `redis` | 6379 (internal) | redis:alpine (256mb) | — |
-| ~~`ollama`~~ | ~~11434~~ | ~~ollama/ollama:latest~~ | **отключён** (закомментирован) |
 | `backend` | 8000 (localhost) | ./backend | qdrant, redis |
 | `celery_worker` | — | ./backend | backend, redis |
 | `bot` | — | ./bot | backend |
@@ -236,9 +235,11 @@ User ──< AiChat ──< AiMessage                            │
 | `SIGNAL_API_URL` | URL Signal REST API (http://facewatch_signal:8080) |
 | `BOT_API_KEY` | API ключ для Signal бота |
 | `WHATSAPP_BACKEND_URL` | URL backend для WhatsApp бота |
-| `OLLAMA_URL` | URL Ollama (http://facewatch_ollama:11434) |
-| `OLLAMA_MODEL` | Модель (gemma4:e4b) |
-| `OLLAMA_TIMEOUT` | Таймаут Ollama в секундах (120) |
+| `GEMINI_API_KEY` | API ключ Gemini |
+| `GEMINI_MODEL` | Основная модель Gemini |
+| `GEMINI_FALLBACK_MODELS` | Резервные модели Gemini через запятую |
+| `GEMINI_TIMEOUT` | Таймаут Gemini в секундах |
+| `GEMINI_TEMPERATURE` | Температура генерации |
 
 ---
 
@@ -403,16 +404,16 @@ process_photo task:
 По телефону: нормализация украинского номера → поиск в message_phones
 ```
 
-### 4. AI-модуль (Ollama)
+### 4. AI-модуль (Gemini)
 ```
-Статус: проверка доступности модели
+Статус: проверка доступности Gemini API
 Чат: создание чата → streaming SSE-ответы → сохранение истории
-Quick-запросы: daily briefing, case summary, person summary
-Отчёты: сохранение + просмотр + удаление + экспорт в PDF
+Quick-запросы: daily briefing из БД
+Read-only SQL: безопасные SELECT/WITH-запросы для аналитических вопросов
 ```
 
 ### 5. Дедупликация фото
-При загрузке фото вычисляется SHA-256 хеш. Если картинка уже есть в БД (`photo_hash`), дубликат отбрасывается — экономия диска QNAP, базы Qdrant и ресурсов Celery.
+При загрузке фото вычисляется SHA-256 хеш. Если картинка уже есть в БД (`photo_hash`), новый объект сохраняется со ссылкой на существующий файл — экономия диска QNAP без потери контекста сообщений.
 
 ### 6. Мультиплатформенное управление группами
 - `platform_states` — состояние платформ (Signal, WhatsApp)
@@ -501,5 +502,5 @@ sudo systemctl start facewatch
 3. **`.env` файл** — содержит секреты, не коммитить! Использовать `.env.example` как шаблон
 4. **Файлы `.env` и `processed_ids.txt`** — в `.gitignore`
 5. **Локальная разработка фронтенда** — `cd frontend && npm run dev` (Vite dev server на 5173)
-6. **Ollama** — отключён (закомментирован в docker-compose.yml). Для восстановления — раскомментировать блок `ollama` и вернуть зависимость `backend.depends_on`
+6. **Gemini** — для AI-модуля нужен `GEMINI_API_KEY` в `.env` и rebuild backend после изменения конфигурации
 7. **Мультиплатформенность** — при добавлении новой платформы создать endpoint в `platforms.py`, обновить `PlatformState` и `PlatformGroupLink` модели, реализовать бот/коннектор

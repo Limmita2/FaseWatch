@@ -11,7 +11,6 @@ import UsersPage from '@/pages/UsersPage';
 import InputPage from '@/pages/InputPage';
 import TgAccountsPage from '@/pages/TgAccountsPage';
 import AiPage from '@/pages/AiPage';
-import ReportsPage from '@/pages/ReportsPage';
 import WaAccountsPage from '@/pages/WaAccountsPage';
 import SignalPage from '@/pages/SignalPage';
 
@@ -40,7 +39,6 @@ export default function App() {
                     <Route index element={<DashboardPage />} />
                     <Route path="search" element={<SearchPage />} />
                     <Route path="ai" element={<AdminRoute><AiPage /></AdminRoute>} />
-                    <Route path="ai/reports" element={<AdminRoute><ReportsPage /></AdminRoute>} />
                     {/* Admin-only routes */}
                     <Route path="messages" element={<AdminRoute><MessagesPage /></AdminRoute>} />
                     <Route path="groups" element={<AdminRoute><GroupsPage /></AdminRoute>} />

@@ -3,6 +3,7 @@ const path = require('path')
 const axios = require('axios')
 const sharp = require('sharp')
 const qrcode = require('qrcode-terminal')
+const QRCode = require('qrcode')
 const {
     default: makeWASocket,
     DisconnectReason,
@@ -431,6 +432,10 @@ async function startSocket() {
         if (qr) {
             log('info', 'Сканируйте QR-код WhatsApp в терминале:')
             qrcode.generate(qr, { small: true })
+            const qrImagePath = path.join(SESSION_DIR, 'qr.png')
+            QRCode.toFile(qrImagePath, qr, { width: 400 }, (err) => {
+                if (!err) log('info', `QR-код сохранён в файл: ${qrImagePath} (откройте whatsapp-session/qr.png на хосте)`)
+            })
         }
 
         if (connection === 'open') {

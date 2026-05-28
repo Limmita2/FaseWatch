@@ -234,12 +234,14 @@ async def receive_bot_message(
         if photo_data:
             photo_hash = hashlib.sha256(photo_data).hexdigest()
             dup_photo = await db.execute(select(Message).where(Message.photo_hash == photo_hash))
-            if dup_photo.scalars().first():
-                return {"ok": True, "duplicate": True, "reason": "photo_duplicated"}
-
-            has_photo = True
-            ts_str = ts.strftime("%Y-%m-%dT%H-%M-%S") if ts else "unknown"
-            photo_path = save_photo_to_qnap(photo_data, str(group.id), message_id, ts_str)
+            existing_msg = dup_photo.scalars().first()
+            if existing_msg:
+                has_photo = True
+                photo_path = existing_msg.photo_path
+            else:
+                has_photo = True
+                ts_str = ts.strftime("%Y-%m-%dT%H-%M-%S") if ts else "unknown"
+                photo_path = save_photo_to_qnap(photo_data, str(group.id), message_id, ts_str)
 
     # Resolve source_account_id
     src_account_uuid = None

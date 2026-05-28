@@ -5,11 +5,13 @@ import { useSearchParams } from 'react-router-dom';
 import { searchApi } from '@/services/api';
 
 export default function SearchPage() {
-    const [tab, setTab] = useState<'photo' | 'text' | 'phone'>('photo');
+    const [tab, setTab] = useState<'photo' | 'text' | 'phone' | 'person'>('photo');
     const [textQuery, setTextQuery] = useState('');
     const [phoneQuery, setPhoneQuery] = useState('');
+    const [personQuery, setPersonQuery] = useState('');
     const [textResults, setTextResults] = useState<any[]>([]);
     const [phoneResults, setPhoneResults] = useState<any[]>([]);
+    const [personResults, setPersonResults] = useState<any[]>([]);
     const [searchParams] = useSearchParams();
 
     // Авто-перехід на вкладку телефону з URL (при навігації з /messages)
@@ -25,6 +27,15 @@ export default function SearchPage() {
                     const { data } = await searchApi.byPhone(urlQ);
                     setPhoneResults(data.results || []);
                 } catch { setPhoneResults([]); }
+            })();
+        } else if (urlTab === 'person' && urlQ) {
+            setTab('person');
+            setPersonQuery(urlQ);
+            (async () => {
+                try {
+                    const { data } = await searchApi.byPerson(urlQ);
+                    setPersonResults(data.results || []);
+                } catch { setPersonResults([]); }
             })();
         }
     }, [searchParams]);
@@ -110,6 +121,16 @@ export default function SearchPage() {
         setLoading(false);
     };
 
+    const handlePersonSearch = async () => {
+        if (!personQuery.trim()) return;
+        setLoading(true);
+        try {
+            const { data } = await searchApi.byPerson(personQuery.trim());
+            setPersonResults(data.results || []);
+        } catch { setPersonResults([]); }
+        setLoading(false);
+    };
+
     // Підсвічування телефонних номерів у тексті
     const highlightPhones = (text: string | null | undefined) => {
         if (!text) return null;
@@ -145,6 +166,7 @@ export default function SearchPage() {
                 <button className={tab === 'photo' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('photo')}>📷 За фото</button>
                 <button className={tab === 'text' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('text')}>📝 За текстом</button>
                 <button className={tab === 'phone' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('phone')}>📱 За телефоном</button>
+                <button className={tab === 'person' ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab('person')}>🆔 За person_id</button>
             </div>
 
             {tab === 'photo' && (
@@ -428,6 +450,58 @@ export default function SearchPage() {
                             </div>
                         ))}
                         {phoneResults.length === 0 && !loading && phoneQuery && <p style={{ color: 'var(--fw-text-dim)', textAlign: 'center', padding: '24px' }}>Нічого не знайдено</p>}
+                    </div>
+                </div>
+            )}
+
+            {tab === 'person' && (
+                <div>
+                    <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                        <input className="input-field" placeholder="Вставте person_id..." value={personQuery} onChange={e => setPersonQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handlePersonSearch()} />
+                        <button className="btn-primary" onClick={handlePersonSearch}>Шукати</button>
+                    </div>
+
+                    {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}><div className="spinner" /></div>}
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {personResults.map((r: any) => (
+                            <div
+                                key={r.face_id}
+                                className="glass-card"
+                                style={{ padding: '14px', cursor: 'pointer', transition: 'border-color 0.2s', border: '1px solid transparent', display: 'flex', gap: '16px' }}
+                                onClick={() => setExpandedMatch({ ...r, similarity: null })}
+                                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--fw-primary, #3b82f6)'}
+                                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+                            >
+                                {(r.crop_path || r.photo_path) && (
+                                    <div style={{ flexShrink: 0, width: '90px', height: '90px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
+                                        <img
+                                            src={`/files/${(r.crop_path || r.photo_path || '').replace(/^\/mnt\/qnap_photos\//, '')}`}
+                                            alt="person"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                        />
+                                    </div>
+                                )}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                            <span className="badge badge-primary">{r.group_name || '—'}</span>
+                                            {r.group_notes && <span style={{ fontSize: '11px', color: 'var(--fw-warning)', opacity: 0.85, fontStyle: 'italic' }}>{r.group_notes}</span>}
+                                        </div>
+                                        {r.sender_name && <span style={{ fontSize: '13px', fontWeight: 500 }}>{r.sender_name}</span>}
+                                        <span style={{ fontSize: '12px', color: 'var(--fw-text-dim)', marginLeft: 'auto' }}>
+                                            {r.timestamp ? new Date(r.timestamp).toLocaleString('uk-UA') : ''}
+                                        </span>
+                                    </div>
+                                    <div style={{ marginBottom: '6px', fontSize: '12px', color: 'var(--fw-text-dim)', userSelect: 'text' }}>
+                                        face_id: {r.face_id}
+                                    </div>
+                                    <p style={{ fontSize: '14px' }}>{highlightPhones(r.text)}</p>
+                                </div>
+                            </div>
+                        ))}
+                        {personResults.length === 0 && !loading && personQuery && <p style={{ color: 'var(--fw-text-dim)', textAlign: 'center', padding: '24px' }}>Нічого не знайдено</p>}
                     </div>
                 </div>
             )}

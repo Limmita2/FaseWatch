@@ -9,7 +9,6 @@ export default function Sidebar() {
         { path: '/', label: 'Дашборд', icon: '📊', adminOnly: false },
         { path: '/search', label: 'Пошук', icon: '🔍', adminOnly: false },
         { path: '/ai', label: 'AI', icon: '🤖', adminOnly: true },
-        { path: '/ai/reports', label: 'Звіти AI', icon: '🧾', adminOnly: true },
         { path: '/input', label: 'Введення', icon: '📷', adminOnly: true },
         { path: '/messages', label: 'Повідомлення', icon: '💬', adminOnly: true },
         { path: '/groups', label: 'Групи', icon: '👥', adminOnly: true },

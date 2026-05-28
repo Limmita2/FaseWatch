@@ -61,6 +61,10 @@ class ProgressBody(BaseModel):
     history_loaded: Optional[bool] = False
 
 
+class LastMessageIdBody(BaseModel):
+    last_message_id: int
+
+
 class DiscoveredGroupOut(BaseModel):
     telegram_id: int
     title: str
@@ -574,5 +578,27 @@ async def update_progress(
         link.last_message_id = body.last_message_id
     if body.history_loaded:
         link.history_loaded = True
+    await db.commit()
+    return {"ok": True}
+
+
+@router.patch("/groups/{link_id}/last-message-id")
+async def update_last_message_id(
+    link_id: str,
+    body: LastMessageIdBody,
+    db: AsyncSession = Depends(get_db),
+    _: bool = Depends(verify_internal_key),
+):
+    """Internal endpoint for telethon polling worker to persist last_message_id."""
+    result = await db.execute(
+        select(TelegramAccountGroup).where(
+            TelegramAccountGroup.id == uuid.UUID(link_id),
+        )
+    )
+    link = result.scalar_one_or_none()
+    if not link:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    link.last_message_id = body.last_message_id
     await db.commit()
     return {"ok": True}

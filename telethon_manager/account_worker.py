@@ -17,6 +17,7 @@ from document_parser import extract_document_text
 logger = logging.getLogger("account_worker")
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
+TELETHON_API_KEY = os.getenv("TELETHON_API_KEY", "")
 LOCAL_TZ = ZoneInfo("Europe/Kyiv")
 POLL_INTERVAL_SECONDS = 15  # polling interval for channels/supergroups
 
@@ -122,6 +123,7 @@ class AccountWorker:
                 continue
 
             last_id = self.group_last_msg_id.get(tid, 0)
+            max_id_before = last_id
 
             try:
                 if tid not in self._group_entities:
@@ -130,16 +132,22 @@ class AccountWorker:
                 entity = self._group_entities[tid]
 
                 async for msg in self.client.iter_messages(
-                    entity, limit=50, min_id=last_id, reverse=False
+                    entity, limit=50, min_id=last_id, reverse=True
                 ):
                     if not msg or msg.id <= last_id:
                         continue
 
                     try:
                         await self._handle_message_obj(msg, tid, entity)
-                        self.group_last_msg_id[tid] = msg.id
+                        if msg.id > self.group_last_msg_id.get(tid, 0):
+                            self.group_last_msg_id[tid] = msg.id
                     except Exception as e:
                         logger.error(f"Handler error for msg {msg.id}: {e}")
+
+                # Persist last_message_id to backend DB if it advanced
+                new_last_id = self.group_last_msg_id.get(tid, 0)
+                if new_last_id > max_id_before:
+                    await self._update_last_message_id(group, new_last_id)
 
             except Exception as e:
                 logger.debug(f"Poll group {tid} error: {e}")
@@ -306,7 +314,7 @@ class AccountWorker:
         try:
             async with httpx.AsyncClient(timeout=30) as client:
                 resp = await client.post(f"{BACKEND_URL}/api/bot/message", data=data)
-                logger.debug(f"Posted text: {resp.status_code}")
+                logger.info(f"Posted text: {resp.status_code} - {resp.text}")
         except Exception as e:
             logger.error(f"Post error: {e}")
 
@@ -315,6 +323,25 @@ class AccountWorker:
             async with httpx.AsyncClient(timeout=60) as client:
                 files = {"photo": ("photo.jpg", photo_bytes, "image/jpeg")}
                 resp = await client.post(f"{BACKEND_URL}/api/bot/message", data=data, files=files)
-                logger.debug(f"Posted photo: {resp.status_code}")
+                logger.info(f"Posted photo: {resp.status_code} - {resp.text}")
         except Exception as e:
             logger.error(f"Post photo error: {e}")
+
+    async def _update_last_message_id(self, group: dict, last_message_id: int):
+        """Persist last_message_id to backend DB via internal API."""
+        tg_group_id = group.get("id")  # telethon_account_groups row id
+        if not tg_group_id:
+            return
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.patch(
+                    f"{BACKEND_URL}/api/tg-accounts/groups/{tg_group_id}/last-message-id",
+                    json={"last_message_id": last_message_id},
+                    headers={"X-Api-Key": TELETHON_API_KEY},
+                )
+                if resp.status_code == 200:
+                    logger.debug(f"Updated last_message_id={last_message_id} for group {tg_group_id}")
+                else:
+                    logger.warning(f"Failed to update last_message_id: {resp.status_code} {resp.text}")
+        except Exception as e:
+            logger.error(f"Failed to persist last_message_id: {e}")

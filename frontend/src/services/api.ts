@@ -72,6 +72,7 @@ export const searchApi = {
     },
     byText: (q: string, page = 1) => api.get('/search/text', { params: { q, page } }),
     byPhone: (q: string, page = 1) => api.get('/search/phone', { params: { q, page } }),
+    byPerson: (personId: string, page = 1) => api.get(`/search/person/${encodeURIComponent(personId)}`, { params: { page } }),
     getFaceContext: (faceId: string) => api.get(`/search/face/${faceId}/context`),
 };
 
@@ -157,9 +158,4 @@ export const aiApi = {
     quickDaily: () => api.post('/ai/quick/daily-brief', undefined, { timeout: 300_000 }),
     quickCase: (data: { case_id: string; days?: number }) => api.post('/ai/quick/case-summary', data, { timeout: 300_000 }),
     quickPerson: (data: { person_id: string }) => api.post('/ai/quick/person-analysis', data, { timeout: 300_000 }),
-    reports: () => api.get('/ai/reports'),
-    report: (reportId: string) => api.get(`/ai/reports/${reportId}`),
-    saveReport: (data: { title: string; report_type: string; context_id?: string; content: string }) =>
-        api.post('/ai/reports', data),
-    deleteReport: (reportId: string) => api.delete(`/ai/reports/${reportId}`),
 };

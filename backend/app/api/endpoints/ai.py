@@ -1,5 +1,6 @@
 import io
 import json
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -21,6 +22,7 @@ from app.models.models import AiChat, AiMessage, AiReport, Group, User
 from app.services.ai_context_builder import (
     build_context_for_case,
     build_context_for_daily,
+    build_daily_briefing_report,
     build_context_for_general,
     build_context_for_group,
     build_context_for_person,
@@ -32,8 +34,9 @@ from app.services.ai_service import (
     SYSTEM_PROMPT_GENERAL,
     SYSTEM_PROMPT_GROUP,
     SYSTEM_PROMPT_PERSON,
-    ollama_service,
+    ai_service,
 )
+from app.services.ai_sql_service import maybe_answer_with_sql
 
 
 router = APIRouter()
@@ -193,9 +196,32 @@ def _make_pdf(title: str, content: str) -> bytes:
     return buffer.getvalue()
 
 
+def _direct_stream_response(db: AsyncSession, chat: AiChat, content: str) -> StreamingResponse:
+    async def direct_event_stream():
+        try:
+            yield f"data: {json.dumps(content, ensure_ascii=False)}\n\n"
+            db.add(
+                AiMessage(
+                    id=uuid.uuid4(),
+                    chat_id=chat.id,
+                    role="assistant",
+                    content=content,
+                )
+            )
+            chat.updated_at = datetime.utcnow()
+            await db.commit()
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            await db.rollback()
+            yield f"data: {json.dumps(f'[ERROR] {str(exc)}', ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(direct_event_stream(), media_type="text/event-stream")
+
+
 @router.get("/status")
 async def ai_status(_: User = Depends(get_current_user)):
-    return await ollama_service.get_status()
+    return await ai_service.get_status()
 
 
 @router.get("/chats", response_model=list[ChatOut])
@@ -291,13 +317,65 @@ async def send_chat_message(
     history = history_result.scalars().all()
     context = await _build_context(chat.context_type, chat.context_id)
     messages = [{"role": "user", "content": f"КОНТЕКСТ FACEWATCH:\n\n{context}"}]
+    sql_result = None
+    try:
+        sql_result = await maybe_answer_with_sql(db, body.content.strip())
+    except Exception as exc:
+        sql_result = {"error": str(exc)}
+
+    if sql_result and not isinstance(sql_result, dict):
+        if sql_result.direct_answer:
+            return _direct_stream_response(db, chat, sql_result.direct_answer)
+
+        count_match = re.match(
+            r"select\s+count\(\*\)\s+as\s+total_records\s+from\s+([a-zA-Z_][\w]*)$",
+            sql_result.sql,
+            flags=re.IGNORECASE,
+        )
+        if count_match and sql_result.rows and "total_records" in sql_result.rows[0]:
+            table_name = count_match.group(1)
+            total_records = sql_result.rows[0]["total_records"]
+            assistant_content = f"В таблице `{table_name}` сейчас {total_records} записей."
+            return _direct_stream_response(db, chat, assistant_content)
+
+    if not ai_service.api_key:
+        return _direct_stream_response(
+            db,
+            chat,
+            "Gemini API не налаштований. Додайте `GEMINI_API_KEY` у `.env` і перезапустіть backend.",
+        )
+
+    if sql_result:
+        if isinstance(sql_result, dict):
+            sql_context = json.dumps(sql_result, ensure_ascii=False, default=str)
+        else:
+            sql_context = json.dumps(
+                {
+                    "sql": sql_result.sql,
+                    "rows": sql_result.rows,
+                    "row_count": sql_result.row_count,
+                },
+                ensure_ascii=False,
+                default=str,
+            )
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "РЕЗУЛЬТАТ READ-ONLY SQL-ЗАПРОСА ДО БД FACEWATCH:\n"
+                    f"{sql_context}\n\n"
+                    "Если результат содержит нужные данные, ответь пользователю прямо, "
+                    "не предлагай ему выполнять SQL самостоятельно."
+                ),
+            }
+        )
     for item in history:
         messages.append({"role": item.role, "content": item.content})
 
     async def event_stream():
         collected: list[str] = []
         try:
-            async for chunk in ollama_service.chat(messages, _system_prompt(chat.context_type)):
+            async for chunk in ai_service.chat(messages, _system_prompt(chat.context_type)):
                 collected.append(chunk)
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
@@ -340,23 +418,8 @@ async def quick_daily_brief(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    context = await build_context_for_daily()
-    prompt = (
-        "Підготуй денний оперативний брифінг за наданим контекстом. "
-        "Структура: ключові події, активні групи, ризики, пріоритетні дії.\n\n"
-        + context
-    )
-    content = await ollama_service.generate(prompt)
-    report = AiReport(
-        id=uuid.uuid4(),
-        user_id=current_user.id,
-        title=f"Денний брифінг {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
-        report_type="daily",
-        content=content,
-    )
-    db.add(report)
-    await db.commit()
-    return {"content": content, "report_id": str(report.id)}
+    content = await build_daily_briefing_report(db)
+    return {"content": content, "report_id": None, "source": "database"}
 
 
 @router.post("/quick/case-summary")
