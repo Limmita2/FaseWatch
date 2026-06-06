@@ -60,22 +60,7 @@ export default function WaAccountsPage() {
                 <div>
                     <div style={{ fontWeight: 700, marginBottom: '8px' }}>Підключення</div>
                     <div style={{ color: 'var(--fw-text-muted)', lineHeight: 1.6 }}>
-                        Сервіс працює через Baileys у контейнері <code>facewatch_whatsapp</code>.
-                        Перша авторизація виконується по QR-коду з логів контейнера.
-                    </div>
-                </div>
-                <div>
-                    <div style={{ fontWeight: 700, marginBottom: '8px' }}>Команди</div>
-                    <div style={{ color: 'var(--fw-text-muted)', lineHeight: 1.6 }}>
-                        <code>docker compose build facewatch_whatsapp</code><br />
-                        <code>docker compose up -d facewatch_whatsapp</code><br />
-                        <code>docker logs -f facewatch_whatsapp</code>
-                    </div>
-                </div>
-                <div>
-                    <div style={{ fontWeight: 700, marginBottom: '8px' }}>Сесія</div>
-                    <div style={{ color: 'var(--fw-text-muted)', lineHeight: 1.6 }}>
-                        Дані авторизації зберігаються в <code>./whatsapp-session</code>. При logout контейнер завершується і після рестарту покаже новий QR.
+                        Для використання акаунта Whatsapp потрібно додати в групу телефонний номер <strong style={{ color: 'var(--fw-primary)', fontSize: '1.2em' }}>380635900899</strong>. Після його додавання, всі нові повідомлення з групи будуть парситися в програму.
                     </div>
                 </div>
             </div>
